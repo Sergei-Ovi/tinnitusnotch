@@ -1,4 +1,4 @@
-import {MAX_FREQUENCY, MIN_FREQUENCY} from '@/lib/audio/scale';
+import {clamp, MAX_FREQUENCY, MIN_FREQUENCY} from '@/lib/audio/scale';
 
 /** Range searched by the comparisons; tinnitus pitch is almost always inside it. */
 export const SEARCH_LOW = 500;
@@ -12,6 +12,11 @@ export const MAX_RELIABLE_SPREAD = 0.5;
 const OVERLAP = 0.1;
 /** Where each run makes its first split: the same search, started from different comparisons. */
 const FIRST_SPLITS = [0.5, 0.35, 0.65];
+/** With a starting hypothesis, the first run splits on it and the others a bit below and above. */
+const HYPOTHESIS_SPLIT_OFFSETS = [0, -0.15, 0.15];
+/** Keeps a first split near the ends of the range from leaving one candidate squeezed against the edge. */
+const MIN_FIRST_SPLIT = 0.2;
+const MAX_FIRST_SPLIT = 0.8;
 /** Later splits wander around the middle, so runs don't repeat each other's comparisons. */
 const SPLIT_JITTER = 0.1;
 
@@ -33,15 +38,23 @@ export type Run = {
 
 const toHz = (octaves: number) => Math.round(2 ** octaves);
 
-export function startRun(index: number, random = Math.random): Run {
+/** `hypothesis` is where the tinnitus is expected, e.g. at a steep edge of hearing loss; null if unknown. */
+export function startRun(index: number, random = Math.random, hypothesis: number | null = null): Run {
 	return {
 		index,
 		low: Math.log2(SEARCH_LOW),
 		high: Math.log2(SEARCH_HIGH),
 		trial: 0,
-		split: FIRST_SPLITS[index % FIRST_SPLITS.length],
+		split: firstSplit(index, hypothesis),
 		lowerFirst: random() < 0.5,
 	};
+}
+
+export function firstSplit(index: number, hypothesis: number | null) {
+	if (hypothesis === null) return FIRST_SPLITS[index % FIRST_SPLITS.length];
+	const at = Math.log2(hypothesis / SEARCH_LOW) / Math.log2(SEARCH_HIGH / SEARCH_LOW);
+	const offset = HYPOTHESIS_SPLIT_OFFSETS[index % HYPOTHESIS_SPLIT_OFFSETS.length];
+	return clamp(at + offset, MIN_FIRST_SPLIT, MAX_FIRST_SPLIT);
 }
 
 /** Candidates are the centres of the two parts of the interval. */

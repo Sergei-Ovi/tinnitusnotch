@@ -1,5 +1,14 @@
 import {clamp, MAX_FREQUENCY, MIN_FREQUENCY} from '@/lib/audio/scale';
 import {
+	type Audiogram,
+	type AudiometryState,
+	audiometryDone,
+	hearingEdge,
+	respond,
+	startAudiometry,
+} from './audiometry';
+import {clampLevel, REFERENCE_DB} from './levels';
+import {
 	answerTrial,
 	type Choice,
 	type Combined,
@@ -19,20 +28,19 @@ export const TINNITUS_TYPES: TinnitusType[] = ['tonal', 'hissing'];
 /** Width of the narrowband noise used for hissing tinnitus, in octaves. */
 export const HISS_BANDWIDTH = 1 / 3;
 
-/**
- * Levels are in dB relative to the hard output ceiling, so always ≤ 0.
- * The calibration tone sits at {@link REFERENCE_DB}; the user sets the system volume around it.
- */
-export const REFERENCE_DB = -30;
-export const MIN_LEVEL_DB = -90;
-export const MAX_LEVEL_DB = 0;
 /** Where the loudness match starts, above the threshold just found. */
 const LOUDNESS_START_ABOVE_THRESHOLD = 10;
 
-export type WizardStep = 'calibrate' | 'type' | 'match' | 'octave' | 'fine-tune' | 'threshold' | 'loudness' | 'done';
+export type WizardStep = 'calibrate' | 'hearing' | 'type' | 'match' | 'octave' | 'fine-tune' | 'threshold' | 'loudness' | 'done';
 
 export type WizardState = {
 	step: WizardStep;
+	/** Hearing test in progress, during the `hearing` step; null before it starts. */
+	audiometry: AudiometryState | null;
+	/** Result of the hearing test; null if it was skipped. */
+	audiogram: Audiogram | null;
+	/** Starting hypothesis for the comparisons: the steep edge of hearing loss, if there is one. */
+	hypothesis: number | null;
 	type: TinnitusType | null;
 	/** Bisection run in progress, during the `match` step. */
 	run: Run | null;
@@ -61,11 +69,16 @@ export type MatchResult = {
 	/** Hearing threshold and tinnitus loudness match at `frequency`, dB re ceiling; null if skipped. */
 	thresholdDb: number | null;
 	loudnessDb: number | null;
+	/** Hearing test made with this match; absent in matches made before the test existed. */
+	audiogram?: Audiogram | null;
 };
 
 export function startWizard(): WizardState {
 	return {
 		step: 'calibrate',
+		audiometry: null,
+		audiogram: null,
+		hypothesis: null,
 		type: null,
 		run: null,
 		estimates: [],
@@ -78,16 +91,44 @@ export function startWizard(): WizardState {
 }
 
 export function calibrated(state: WizardState): WizardState {
-	return {...state, step: 'type'};
+	if (state.step !== 'calibrate') return state;
+	return {...state, step: 'hearing'};
 }
 
-/** Starts (or restarts) the comparisons from the first run, dropping any earlier results. */
-export function chooseType(type: TinnitusType, random = Math.random): WizardState {
+export function startHearing(state: WizardState): WizardState {
+	if (state.step !== 'hearing') return state;
+	return {...state, audiometry: startAudiometry()};
+}
+
+/** Answer to "did you hear the beeps?"; after the last one, moves on with the audiogram and its edge. */
+export function hearingResponse(state: WizardState, heard: boolean): WizardState {
+	if (state.step !== 'hearing' || !state.audiometry) return state;
+	const audiometry = respond(state.audiometry, heard);
+	if (!audiometryDone(audiometry)) return {...state, audiometry};
+	return {
+		...state,
+		step: 'type',
+		audiometry: null,
+		audiogram: audiometry.audiogram,
+		hypothesis: hearingEdge(audiometry.audiogram)?.frequency ?? null,
+	};
+}
+
+/** The hearing test is optional; skipping it part-way drops what was measured. */
+export function skipHearing(state: WizardState): WizardState {
+	if (state.step !== 'hearing') return state;
+	return {...state, step: 'type', audiometry: null, audiogram: null, hypothesis: null};
+}
+
+/** Starts (or restarts) the comparisons from the first run, keeping only the hearing test. */
+export function chooseType(state: WizardState, type: TinnitusType, random = Math.random): WizardState {
 	return {
 		...startWizard(),
+		audiogram: state.audiogram,
+		hypothesis: state.hypothesis,
 		step: 'match',
 		type,
-		run: startRun(0, random),
+		run: startRun(0, random, state.hypothesis),
 	};
 }
 
@@ -97,7 +138,7 @@ export function answer(state: WizardState, choice: Choice, random = Math.random)
 	if (!runDone(run)) return {...state, run};
 
 	const estimates = [...state.estimates, runEstimate(run)];
-	if (estimates.length < RUNS) return {...state, run: startRun(estimates.length, random), estimates};
+	if (estimates.length < RUNS) return {...state, run: startRun(estimates.length, random, state.hypothesis), estimates};
 
 	const combined = combineRuns(estimates);
 	return {
@@ -160,6 +201,7 @@ export function toResult(state: WizardState, id: string, date: Date): MatchResul
 		reliable: combined.reliable,
 		thresholdDb: state.thresholdDb,
 		loudnessDb: state.loudnessDb,
+		audiogram: state.audiogram,
 	};
 }
 
@@ -167,10 +209,6 @@ export function toResult(state: WizardState, id: string, date: Date): MatchResul
 export function sensationLevel(result: Pick<MatchResult, 'thresholdDb' | 'loudnessDb'>) {
 	const {thresholdDb, loudnessDb} = result;
 	return thresholdDb === null || loudnessDb === null ? null : loudnessDb - thresholdDb;
-}
-
-export function clampLevel(db: number) {
-	return clamp(db, MIN_LEVEL_DB, MAX_LEVEL_DB);
 }
 
 /** Newest first, one entry per id; `incoming` wins on conflicts. */

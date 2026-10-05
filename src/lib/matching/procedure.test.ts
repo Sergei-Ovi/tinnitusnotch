@@ -3,6 +3,7 @@ import {
 	answerTrial,
 	type Choice,
 	combineRuns,
+	firstSplit,
 	octaveOptions,
 	type Run,
 	runDone,
@@ -55,6 +56,23 @@ describe('bisection run', () => {
 		}
 		expect(lowerFirst).toBeGreaterThan(10);
 		expect(lowerFirst).toBeLessThan(30);
+	});
+
+	it('splits on the starting hypothesis first, then around it', () => {
+		const at = (f: number) => Math.log2(f / SEARCH_LOW) / Math.log2(SEARCH_HIGH / SEARCH_LOW);
+		expect(firstSplit(0, 3000)).toBeCloseTo(at(3000));
+		expect(firstSplit(1, 3000)).toBeCloseTo(at(3000) - 0.15);
+		expect(firstSplit(2, 3000)).toBeCloseTo(at(3000) + 0.15);
+		expect(firstSplit(0, 11000)).toBe(0.8);
+		expect(firstSplit(1, 600)).toBe(0.2);
+	});
+
+	it('still converges on a target away from a wrong hypothesis', () => {
+		const random = seeded(3);
+		for (const target of [700, 1500, 9000]) {
+			const run = runToEnd(startRun(0, random, 4000), idealListener(target), random);
+			expect(octavesBetween(runEstimate(run), target)).toBeLessThan(1 / 3);
+		}
 	});
 
 	it('starts each run with a different comparison', () => {
