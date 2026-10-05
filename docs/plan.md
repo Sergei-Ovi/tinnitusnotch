@@ -19,7 +19,13 @@ for relief, with no medical claims.
 - One frequency for both ears; mono playback. Per-ear therapy — later.
 - Desktop only for now; UI in English.
 - Hard volume ceiling in code; therapy level hint: at or below tinnitus loudness, tinnitus stays audible.
-- Data in localStorage with JSON export/import.
+- Data in localStorage with JSON export/import. Import merges sessions by id; settings are restored
+  only into an empty history (new device).
+- Sessions: 15 / 30 / 45 / 60 min timer, 30 by default. Loudness rating 0–10 before and after, both
+  skippable. Sessions under a minute are not saved; a session cut off by closing the tab is saved
+  with the time listened (checkpointed every 15 s).
+- Screens are tabs: Therapy / Setup / History. The session owns the audio output: the matching tone
+  is disabled while a session is active.
 - Analytics (umami): anonymous events only (wizard step reached/abandoned, session start/finish with
   duration). No frequencies or ratings.
 - Procedure logic lives in pure modules without Web Audio, covered by Vitest.
