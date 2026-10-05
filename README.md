@@ -1,46 +1,58 @@
-[![Deploy static content to Pages](https://github.com/vladplskv/tinnitusnotch/actions/workflows/main.yml/badge.svg)](https://github.com/vladplskv/tinnitusnotch/actions/workflows/main.yml)
+# Tinnitus Notch
 
-Notched sound therapy for tinnitus: noise with an octave-wide band removed around your tinnitus frequency.
-Not a medical treatment. Development plan: [docs/plan.md](docs/plan.md).
+**Open the app: <https://sergei-ovi.github.io/tinnitusnotch/>** — works in any desktop browser, nothing to install.
 
-## Usage
+Notched sound therapy for tinnitus: noise with a band removed around your tinnitus frequency, plus a
+guided test to find that frequency and a diary to see whether it helps. Interface in English and Russian.
 
-Those templates dependencies are maintained via [pnpm](https://pnpm.io) via `pnpm up -Lri`.
+> **Not a medical treatment.** Notched sound therapy (TMNMT, Okamoto/Pantev 2010) may reduce tinnitus
+> loudness for some people, but the evidence is limited: small early studies showed a moderate effect,
+> the largest trial (Stein et al. 2016) found no significant difference from placebo. It is expected to
+> work best for tonal tinnitus below ~8 kHz, and only if the frequency is matched accurately.
+> See a doctor if your tinnitus pulses with your heartbeat, appeared suddenly in one ear, or comes with
+> hearing loss or dizziness.
 
-This is the reason you see a `pnpm-lock.yaml`. That being said, any package manager will work. This file can be safely be removed once you clone a template.
+## What it does
+
+- **Finds your tinnitus frequency** in about 10 minutes, with headphones:
+  volume calibration → optional hearing check (both ears, with catch trials) → tone or hiss →
+  24 A/B comparisons in three rounds → octave check → fine-tuning → optional loudness match →
+  optional after-effect check (residual inhibition). Or set the frequency by hand.
+- **Plays therapy noise** — white, pink or brown, with a 0.25–1 octave band removed ≥ 40 dB deep
+  around your frequency. Timed sessions of 15–60 minutes, with a hard volume ceiling.
+- **Tracks progress** — tinnitus loudness 0–10 before and after each session, a daily trend chart,
+  therapy time, the history of frequency matches with their loudness and hearing check.
+
+Everything stays in your browser (localStorage); export a JSON backup to move it to another device.
+Optional anonymous usage events (umami) never include frequencies or ratings.
+
+## How it works
+
+The notched noise is synthesised in the frequency domain — coloured spectrum, zeroed bins in the notch,
+inverse FFT into a looped buffer — because filters can't cut a full octave 40 dB deep without eating the
+neighbouring frequencies. Procedure logic (matching, hearing check, sessions, backup) lives in pure
+modules under `src/lib` and is covered by Vitest. Design decisions and history: [docs/plan.md](docs/plan.md).
+
+Stack: [Solid](https://solidjs.com), Vite, Tailwind, Web Audio API.
+
+## Development
 
 ```bash
-$ npm install # or pnpm install or yarn install
+pnpm install     # or npm install
+pnpm dev         # http://localhost:3000
+pnpm test        # Vitest
+pnpm build       # production build into dist/
 ```
 
-### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
-
-## Available Scripts
-
-In the project directory, you can run:
-
-### `npm run dev` or `npm start`
-
-Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
-
-The page will reload if you make edits.<br>
-
-### `npm run build`
-
-Builds the app for production to the `dist` folder.<br>
-It correctly bundles Solid in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
-
-### `npm test`
-
-Runs the unit tests (Vitest) for the pure logic in `src/lib`: audio synthesis, matching procedure,
-hearing check, therapy sessions and backup.
+On Windows PowerShell with script execution disabled, use `npm.cmd` instead of `npm`.
 
 ## Deployment
 
-You can deploy the `dist` folder to any static host provider (netlify, surge, now, etc.)
+Every push to `main` builds and deploys to GitHub Pages (`.github/workflows/main.yml`); the base path is
+the repository name. Set the repository variables `UMAMI_WEBSITE_ID` and `UMAMI_SCRIPT_SRC` to enable
+analytics; without them no analytics script is added.
 
-## This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli)
+## Credits
+
+Started by [Vladislav Ploskov](https://github.com/vladplskv) as
+[vladplskv/tinnitusnotch](https://github.com/vladplskv/tinnitusnotch). MIT licence.

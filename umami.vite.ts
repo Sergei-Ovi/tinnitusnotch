@@ -21,7 +21,8 @@ export default function ViteUmami(opts: ViteUmamiOptions): Plugin {
 			viteConfig = config;
 		},
 		transformIndexHtml() {
-			if (viteConfig.command === 'serve' && !opts.enableDev)
+			// No analytics without a configured site, and none in dev unless asked for.
+			if (!opts.id || !opts.src || (viteConfig.command === 'serve' && !opts.enableDev))
 				return [];
 
 			return [{
