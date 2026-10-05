@@ -16,7 +16,7 @@ for relief, with no medical claims.
   Implemented as frequency-domain synthesis (zeroed FFT bins + colour slope → inverse FFT → looped
   buffer), because a biquad cascade cannot reach ≥40 dB across a full octave without eating the
   neighbouring frequencies.
-- One frequency for both ears; mono playback. Per-ear therapy — later.
+- One frequency for both ears; mono playback. Per-ear therapy is not planned.
 - Desktop only for now; UI in English.
 - Hard volume ceiling in code; therapy level hint: at or below tinnitus loudness, tinnitus stays audible.
 - Data in localStorage with JSON export/import. Import merges sessions by id; settings are restored
@@ -102,7 +102,7 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
    session ends; another tab gets "already running in another tab" and leaves the draft alone.
    Session and match history sync between tabs. — PR #6.
 4. ✅ Catch trials in the hearing check. — PR #7.
-5. Then the deferred list, starting with per-ear therapy (the audiogram already has both ears).
+5. Then the deferred list.
 
 ## Open issues
 
@@ -111,4 +111,4 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
 
 ## Deferred
 
-User music files, PWA / mobile background playback, i18n, per-ear therapy.
+User music files, PWA / mobile background playback, i18n.
