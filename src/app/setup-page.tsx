@@ -7,6 +7,7 @@ import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from '@/components/ui/card';
 import {Slider, SliderFill, SliderLabel, SliderThumb, SliderTrack} from '@/components/ui/slider';
 import {VolumeSlider} from '@/components/volume-slider';
+import {formatDate, formatFrequency, t} from '@/i18n';
 import {
 	FREQUENCY_STEPS,
 	frequencyToPosition,
@@ -15,12 +16,10 @@ import {
 	positionToFrequency,
 	shiftOctaves,
 } from '@/lib/audio/scale';
-import {formatFrequency} from '@/lib/format';
-import {describeInhibition} from '@/lib/matching/inhibition';
 import {sensationLevel} from '@/lib/matching/wizard';
 import {createSignal, onCleanup, Show} from 'solid-js';
 
-const dateFormat = new Intl.DateTimeFormat(undefined, {day: 'numeric', month: 'short', year: 'numeric'});
+const DATE: Intl.DateTimeFormatOptions = {day: 'numeric', month: 'short', year: 'numeric'};
 
 /**
  * Finding the tinnitus frequency: the guided matching, or the manual tone.
@@ -42,8 +41,8 @@ export function SetupPage(props: {onOpenTherapy: () => void}) {
 			<Show when={!session.active()} fallback={
 				<Card>
 					<CardHeader>
-						<CardTitle>Matching paused</CardTitle>
-						<CardDescription>A therapy session is in progress. End it to continue matching.</CardDescription>
+						<CardTitle>{t().setup.paused}</CardTitle>
+						<CardDescription>{t().setup.pausedText}</CardDescription>
 					</CardHeader>
 				</Card>
 			}>
@@ -54,6 +53,7 @@ export function SetupPage(props: {onOpenTherapy: () => void}) {
 }
 
 function MatchCard(props: {firstRun: boolean; onManual: () => void}) {
+	const m = () => t().setup;
 	const last = () => store.matches()[0];
 	const loudness = () => sensationLevel(last());
 
@@ -61,45 +61,41 @@ function MatchCard(props: {firstRun: boolean; onManual: () => void}) {
 		<Card>
 			<Show when={last()} fallback={
 				<CardHeader>
-					<CardTitle>Find your frequency</CardTitle>
-					<CardDescription>
-						A guided test: you compare pairs of sounds with your tinnitus, check the octave and fine-tune
-						the result. It takes about 10 minutes; you need headphones and a quiet room.
-					</CardDescription>
+					<CardTitle>{m().findTitle}</CardTitle>
+					<CardDescription>{m().findText}</CardDescription>
 				</CardHeader>
 			}>
 				<CardHeader>
-					<CardTitle>Your match: {formatFrequency(last().frequency)}</CardTitle>
+					<CardTitle>{m().yourMatch(formatFrequency(last().frequency))}</CardTitle>
 					<CardDescription class="space-y-1">
-						<p>
-							{last().type === 'tonal' ? 'Tonal' : 'Hissing'} tinnitus · matched {dateFormat.format(new Date(last().date))}
-						</p>
+						<p>{m().matchedOn(last().type === 'tonal', formatDate(new Date(last().date), DATE))}</p>
 						<Show when={!last().reliable}>
-							<p>The comparison rounds disagreed, so this match may be inaccurate.</p>
+							<p>{m().unreliable}</p>
 						</Show>
 						<Show when={loudness() !== null}>
-							<p>Loudness: {loudness()} dB above your hearing threshold.</p>
+							<p>{m().loudness(loudness()!)}</p>
 						</Show>
 						<Show when={last().inhibition?.length}>
 							<p>
-								After-effect: {last().inhibition!.map(t => `${formatFrequency(t.frequency)} ${describeInhibition(t)}`).join(', ')}.
+								{m().afterEffect(last().inhibition!
+									.map(trial => `${formatFrequency(trial.frequency)} ${t().format.inhibition(trial)}`).join(', '))}
 							</p>
 						</Show>
 						<Show when={store.frequency() !== last().frequency}>
-							<p>Therapy currently uses {formatFrequency(store.frequency())}, set manually.</p>
+							<p>{m().manualInUse(formatFrequency(store.frequency()))}</p>
 						</Show>
 					</CardDescription>
 				</CardHeader>
 			</Show>
 			<CardFooter class="flex-col gap-2">
 				<Button class="w-full" disabled={session.active()} onClick={matching.start}>
-					{last() ? 'Match again' : 'Start matching'}
+					{last() ? m().matchAgain : m().startMatching}
 				</Button>
 				<Show when={session.active()}>
-					<p class="text-xs text-muted-foreground">A therapy session is in progress. End it to start matching.</p>
+					<p class="text-xs text-muted-foreground">{m().busyMatching}</p>
 				</Show>
 				<Show when={props.firstRun}>
-					<Button variant="ghost" class="w-full" onClick={() => props.onManual()}>I know my frequency</Button>
+					<Button variant="ghost" class="w-full" onClick={() => props.onManual()}>{m().knowFrequency}</Button>
 				</Show>
 			</CardFooter>
 		</Card>
@@ -108,6 +104,7 @@ function MatchCard(props: {firstRun: boolean; onManual: () => void}) {
 
 /** Manual frequency matching with a pure tone. */
 function ManualMatching() {
+	const m = () => t().setup;
 	const {frequency, setFrequency} = store;
 	const playing = () => store.playState() === 'sound';
 
@@ -122,11 +119,8 @@ function ManualMatching() {
 
 			<Card>
 				<CardHeader>
-					<CardTitle>Set the frequency manually</CardTitle>
-					<CardDescription>
-						Play the tone and move it until it matches the pitch of your tinnitus.
-						Check one octave up and down too: octave mistakes are very common.
-					</CardDescription>
+					<CardTitle>{m().manualTitle}</CardTitle>
+					<CardDescription>{m().manualText}</CardDescription>
 				</CardHeader>
 				<CardContent class="space-y-6">
 					<div class="space-y-4">
@@ -135,7 +129,7 @@ function ManualMatching() {
 						        getValueLabel={() => formatFrequency(frequency())}
 						        onChange={([value]) => setFrequency(positionToFrequency(value / FREQUENCY_STEPS))}>
 							<div class="flex w-full items-center justify-between">
-								<SliderLabel>Frequency</SliderLabel>
+								<SliderLabel>{m().frequency}</SliderLabel>
 								<label class="flex items-center gap-1 text-sm font-medium">
 									<input type="number" min={MIN_FREQUENCY} max={MAX_FREQUENCY}
 									       class="w-20 rounded-md border bg-transparent px-2 py-0.5 text-right"
@@ -145,7 +139,7 @@ function ManualMatching() {
 										       if (Number.isFinite(value)) setFrequency(value);
 										       e.currentTarget.value = String(frequency());
 									       }}/>
-									Hz
+									{m().hz}
 								</label>
 							</div>
 							<SliderTrack>
@@ -155,16 +149,16 @@ function ManualMatching() {
 						</Slider>
 						<div class="grid grid-cols-4 gap-2">
 							<Button variant="outline" size="sm" onClick={() => setFrequency(shiftOctaves(frequency(), -1))}>
-								−1 octave
+								{m().octaveDown}
 							</Button>
 							<Button variant="outline" size="sm" onClick={() => setFrequency(shiftOctaves(frequency(), -1 / 12))}>
-								−semitone
+								{m().semitoneDown}
 							</Button>
 							<Button variant="outline" size="sm" onClick={() => setFrequency(shiftOctaves(frequency(), 1 / 12))}>
-								+semitone
+								{m().semitoneUp}
 							</Button>
 							<Button variant="outline" size="sm" onClick={() => setFrequency(shiftOctaves(frequency(), 1))}>
-								+1 octave
+								{m().octaveUp}
 							</Button>
 						</div>
 					</div>
@@ -173,10 +167,10 @@ function ManualMatching() {
 				<CardFooter class="flex-col gap-2">
 					<Button variant="secondary" class="w-full" disabled={session.active()}
 					        onClick={() => store.setPlayState(playing() ? 'idle' : 'sound')}>
-						<Show when={!playing()} fallback="Stop Tone">Play Tone</Show>
+						{playing() ? m().stopTone : m().playTone}
 					</Button>
 					<Show when={session.active()}>
-						<p class="text-xs text-muted-foreground">A therapy session is in progress. End it to play the tone.</p>
+						<p class="text-xs text-muted-foreground">{m().busyTone}</p>
 					</Show>
 				</CardFooter>
 			</Card>

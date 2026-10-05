@@ -1,5 +1,6 @@
 import {store} from '@/app/store';
 import {Slider, SliderFill, SliderLabel, SliderThumb, SliderTrack, SliderValueLabel} from '@/components/ui/slider';
+import {t} from '@/i18n';
 
 export function VolumeSlider() {
 	return (
@@ -7,7 +8,7 @@ export function VolumeSlider() {
 		        getValueLabel={({values}) => `${values[0]}%`}
 		        onChange={([value]) => store.setVolume(value)}>
 			<div class="flex w-full justify-between">
-				<SliderLabel>Volume</SliderLabel>
+				<SliderLabel>{t().common.volume}</SliderLabel>
 				<SliderValueLabel/>
 			</div>
 			<SliderTrack>

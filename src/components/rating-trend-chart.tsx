@@ -1,3 +1,4 @@
+import {formatDate, t} from '@/i18n';
 import type {DailyRatings} from '@/lib/therapy/session';
 import {createSignal, For, Show} from 'solid-js';
 
@@ -9,11 +10,11 @@ const GRID = [0, 5, 10];
 
 /** Fixed order: "before" is the reference, "after" the app's primary colour. Validated for CVD in both themes. */
 const SERIES = [
-	{key: 'before', label: 'Before', stroke: 'stroke-orange-600', mark: 'fill-orange-600', fill: 'bg-orange-600'},
-	{key: 'after', label: 'After', stroke: 'stroke-primary', mark: 'fill-primary', fill: 'bg-primary'},
+	{key: 'before', stroke: 'stroke-orange-600', mark: 'fill-orange-600', fill: 'bg-orange-600'},
+	{key: 'after', stroke: 'stroke-primary', mark: 'fill-primary', fill: 'bg-primary'},
 ] as const;
 
-const dayFormat = new Intl.DateTimeFormat(undefined, {day: 'numeric', month: 'short'});
+const formatDay = (day: number) => formatDate(day, {day: 'numeric', month: 'short'});
 
 /** Daily mean loudness ratings before and after sessions, with a hover crosshair and tooltip. */
 export function RatingTrendChart(props: {days: DailyRatings[]}) {
@@ -48,7 +49,7 @@ export function RatingTrendChart(props: {days: DailyRatings[]}) {
 		<figure class="space-y-2">
 			<div class="relative">
 				<svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} class="h-auto w-full text-muted-foreground" role="img"
-				     aria-label="Tinnitus loudness ratings per day, before and after sessions"
+				     aria-label={t().trend.label}
 				     onMouseLeave={() => setHovered(null)}>
 					<For each={GRID}>{rating =>
 						<g>
@@ -57,10 +58,10 @@ export function RatingTrendChart(props: {days: DailyRatings[]}) {
 							      class="fill-current text-[10px]">{rating}</text>
 						</g>
 					}</For>
-					<text x={PAD.left} y={HEIGHT - 6} class="fill-current text-[10px]">{dayFormat.format(first())}</text>
+					<text x={PAD.left} y={HEIGHT - 6} class="fill-current text-[10px]">{formatDay(first())}</text>
 					<Show when={last() !== first()}>
 						<text x={WIDTH - PAD.right} y={HEIGHT - 6} text-anchor="end" class="fill-current text-[10px]">
-							{dayFormat.format(last())}
+							{formatDay(last())}
 						</text>
 					</Show>
 					<Show when={hovered() !== null}>
@@ -79,7 +80,7 @@ export function RatingTrendChart(props: {days: DailyRatings[]}) {
 							}</For>
 							<Show when={lastValue(series.key)}>{p =>
 								<text x={p().x + 8} y={p().y} dominant-baseline="middle"
-								      class="fill-muted-foreground stroke-none text-[10px]">{series.label.toLowerCase()}</text>
+								      class="fill-muted-foreground stroke-none text-[10px]">{t().trend[series.key].toLowerCase()}</text>
 							}</Show>
 						</g>
 					}</For>
@@ -91,14 +92,14 @@ export function RatingTrendChart(props: {days: DailyRatings[]}) {
 				<Show when={hovered() !== null && props.days[hovered()!]}>{d =>
 					<div class="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md"
 					     style={{left: `${x(d().day) / WIDTH * 100}%`}}>
-						<div class="font-medium">{dayFormat.format(d().day)}</div>
+						<div class="font-medium">{formatDay(d().day)}</div>
 						<For each={SERIES}>{series =>
 							<div class="flex items-center gap-1.5 tabular-nums">
 								<span class={`size-2 rounded-full ${series.fill}`}/>
-								{series.label}: {formatMean(d()[series.key])}
+								{t().trend[series.key]}: {formatMean(d()[series.key])}
 							</div>
 						}</For>
-						<div class="text-muted-foreground">{d().sessions} {d().sessions === 1 ? 'session' : 'sessions'}</div>
+						<div class="text-muted-foreground">{t().trend.sessions(d().sessions)}</div>
 					</div>
 				}</Show>
 			</div>
@@ -106,15 +107,15 @@ export function RatingTrendChart(props: {days: DailyRatings[]}) {
 				<For each={SERIES}>{series =>
 					<span class="flex items-center gap-1.5">
 						<span class={`size-2 rounded-full ${series.fill}`}/>
-						{series.label} sessions
+						{series.key === 'before' ? t().trend.beforeSessions : t().trend.afterSessions}
 					</span>
 				}</For>
-				<span>0 = silent, 10 = loudest; the daily average.</span>
+				<span>{t().trend.caption}</span>
 			</figcaption>
 		</figure>
 	);
 }
 
 function formatMean(value: number | null) {
-	return value === null ? '–' : String(Math.round(value * 10) / 10);
+	return value === null ? '–' : t().format.decimal(Math.round(value * 10) / 10);
 }

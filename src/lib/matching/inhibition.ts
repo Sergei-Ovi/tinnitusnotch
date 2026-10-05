@@ -1,5 +1,4 @@
 import {MAX_FREQUENCY, MIN_FREQUENCY} from '@/lib/audio/scale';
-import {formatClock} from '@/lib/format';
 import {clampLevel} from './levels';
 
 /**
@@ -50,12 +49,4 @@ export function alternativeFrequencies(frequency: number) {
 	return [-ALTERNATIVE_OCTAVES, ALTERNATIVE_OCTAVES]
 		.map(octaves => Math.round(frequency * 2 ** octaves))
 		.filter(f => f >= MIN_FREQUENCY && f <= MAX_FREQUENCY);
-}
-
-/** "quieter for 40 s", "gone for 2:05", "no change". */
-export function describeInhibition(t: InhibitionTrial) {
-	const effect = {gone: 'gone', quieter: 'quieter', none: 'no change', louder: 'louder'}[t.effect];
-	if (t.seconds === null) return effect;
-	const time = t.seconds < 60 ? `${t.seconds} s` : formatClock(t.seconds * 1000);
-	return `${effect} for ${t.seconds >= MAX_TIMED_SECONDS ? `${time} or more` : time}`;
 }

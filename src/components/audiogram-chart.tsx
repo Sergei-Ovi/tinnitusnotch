@@ -1,4 +1,4 @@
-import {formatFrequency} from '@/lib/format';
+import {formatFrequency, t} from '@/i18n';
 import {type Audiogram, audiogramReliable, type Ear, EARS} from '@/lib/matching/audiometry';
 import {MAX_LEVEL_DB, MIN_LEVEL_DB, REFERENCE_DB} from '@/lib/matching/levels';
 import {cn} from '@/lib/utils';
@@ -14,10 +14,7 @@ const GRID_DB = 20;
 const AXIS_FREQUENCIES = [500, 1000, 2000, 4000, 8000];
 
 /** Audiogram convention: right ear in red circles, left ear in blue crosses. */
-const EAR_STYLE: Record<Ear, {label: string; class: string}> = {
-	right: {label: 'Right ear', class: 'stroke-red-500'},
-	left: {label: 'Left ear', class: 'stroke-blue-500'},
-};
+const EAR_STYLE: Record<Ear, string> = {right: 'stroke-red-500', left: 'stroke-blue-500'};
 
 /** Hearing test result on a log-frequency axis, with an optional marker (the tinnitus match). */
 export function AudiogramChart(props: {audiogram: Audiogram; marker?: number}) {
@@ -40,7 +37,7 @@ export function AudiogramChart(props: {audiogram: Audiogram; marker?: number}) {
 	return (
 		<figure class="space-y-2">
 			<svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} class="h-auto w-full text-muted-foreground" role="img"
-			     aria-label="Hearing check result">
+			     aria-label={t().audiogram.label}>
 				<For each={grid}>{db =>
 					<g>
 						<line x1={PAD.left} x2={WIDTH - PAD.right} y1={y(db + REFERENCE_DB)} y2={y(db + REFERENCE_DB)}
@@ -59,7 +56,7 @@ export function AudiogramChart(props: {audiogram: Audiogram; marker?: number}) {
 					      class="stroke-primary" stroke-dasharray="4 3"/>
 				}</Show>
 				<For each={EARS}>{ear =>
-					<g class={cn('fill-none', EAR_STYLE[ear].class)} stroke-width="1.5">
+					<g class={cn('fill-none', EAR_STYLE[ear])} stroke-width="1.5">
 						<path d={path(ear)}/>
 						<For each={props.audiogram[ear]}>{(t, i) => {
 							const cx = () => x(freqs()[i()]);
@@ -81,24 +78,20 @@ export function AudiogramChart(props: {audiogram: Audiogram; marker?: number}) {
 				}</For>
 			</svg>
 			<figcaption class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-				<span><span class="text-red-500">○</span> {EAR_STYLE.right.label}</span>
-				<span><span class="text-blue-500">×</span> {EAR_STYLE.left.label}</span>
+				<span><span class="text-red-500">○</span> {t().audiogram.right}</span>
+				<span><span class="text-blue-500">×</span> {t().audiogram.left}</span>
 				<Show when={EARS.some(ear => props.audiogram[ear].includes(null))}>
-					<span>∨ not heard at the loudest level</span>
+					<span>{t().audiogram.notHeard}</span>
 				</Show>
 				<Show when={props.marker}>{marker =>
-					<span><span class="text-primary">┆</span> your match, {formatFrequency(marker())}</span>
+					<span><span class="text-primary">┆</span> {t().audiogram.marker(formatFrequency(marker()))}</span>
 				}</Show>
 				<Show when={!audiogramReliable(props.audiogram) && props.audiogram.catchTrials}>{c =>
 					<span class="basis-full text-amber-700 dark:text-amber-400">
-						Less reliable: you answered yes to {c().falseAlarms} of {c().presented} silent checks, so
-						tinnitus may have been taken for beeps and some levels may be too low.
+						{t().audiogram.unreliable(c().falseAlarms, c().presented)}
 					</span>
 				}</Show>
-				<span class="basis-full">
-					Quietest level heard at each pitch, relative to the calibration tone; higher on the chart is
-					better hearing. Not a clinical audiogram: the headphones aren't calibrated.
-				</span>
+				<span class="basis-full">{t().audiogram.caption}</span>
 			</figcaption>
 		</figure>
 	);

@@ -21,7 +21,13 @@ export function createBackup(settings: TherapySettings, sessions: Session[], mat
 	return {app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), settings, sessions, matches};
 }
 
-export type ParseResult = {ok: true; backup: Backup} | {ok: false; error: string};
+/** Why a file was rejected; the interface words it. Indexes are 0-based. */
+export type BackupError =
+	| {kind: 'json' | 'not-backup' | 'settings' | 'no-sessions' | 'match-list'}
+	| {kind: 'version'; version: string}
+	| {kind: 'session' | 'match'; index: number};
+
+export type ParseResult = {ok: true; backup: Backup} | {ok: false; error: BackupError};
 
 /** Validates an exported file; rejects it whole rather than importing part of a damaged file. */
 export function parseBackup(text: string): ParseResult {
@@ -29,31 +35,31 @@ export function parseBackup(text: string): ParseResult {
 	try {
 		data = JSON.parse(text);
 	} catch {
-		return {ok: false, error: 'The file is not valid JSON.'};
+		return {ok: false, error: {kind: 'json'}};
 	}
 	if (!isRecord(data) || data.app !== BACKUP_APP) {
-		return {ok: false, error: 'This is not a Tinnitus Notch backup.'};
+		return {ok: false, error: {kind: 'not-backup'}};
 	}
 	if (data.version !== BACKUP_VERSION) {
-		return {ok: false, error: `Unsupported backup version: ${String(data.version)}.`};
+		return {ok: false, error: {kind: 'version', version: String(data.version)}};
 	}
 	if (!isSettings(data.settings)) {
-		return {ok: false, error: 'The backup has invalid settings.'};
+		return {ok: false, error: {kind: 'settings'}};
 	}
 	if (!Array.isArray(data.sessions)) {
-		return {ok: false, error: 'The backup has no session list.'};
+		return {ok: false, error: {kind: 'no-sessions'}};
 	}
 	const bad = data.sessions.findIndex(s => !isSession(s));
 	if (bad >= 0) {
-		return {ok: false, error: `Session #${bad + 1} in the backup is invalid.`};
+		return {ok: false, error: {kind: 'session', index: bad}};
 	}
 	const matches = data.matches ?? [];
 	if (!Array.isArray(matches)) {
-		return {ok: false, error: 'The backup has an invalid match list.'};
+		return {ok: false, error: {kind: 'match-list'}};
 	}
 	const badMatch = matches.findIndex(m => !isMatch(m));
 	if (badMatch >= 0) {
-		return {ok: false, error: `Frequency match #${badMatch + 1} in the backup is invalid.`};
+		return {ok: false, error: {kind: 'match', index: badMatch}};
 	}
 	return {
 		ok: true,

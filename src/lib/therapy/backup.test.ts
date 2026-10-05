@@ -44,14 +44,14 @@ describe('backup', () => {
 	it('rejects unknown versions', () => {
 		expect(parseBackup(JSON.stringify({...exported(), version: 2}))).toEqual({
 			ok: false,
-			error: 'Unsupported backup version: 2.',
+			error: {kind: 'version', version: '2'},
 		});
 	});
 
 	it('rejects the whole file if one session is damaged', () => {
 		const data = exported();
 		data.sessions.push({...session, id: 'b', ratingAfter: 11});
-		expect(parseBackup(JSON.stringify(data))).toEqual({ok: false, error: 'Session #2 in the backup is invalid.'});
+		expect(parseBackup(JSON.stringify(data))).toEqual({ok: false, error: {kind: 'session', index: 1}});
 	});
 
 	it('reads backups made before frequency matches existed', () => {
@@ -65,7 +65,7 @@ describe('backup', () => {
 		data.matches.push({...match, id: 'n', type: 'buzzing'});
 		expect(parseBackup(JSON.stringify(data))).toEqual({
 			ok: false,
-			error: 'Frequency match #2 in the backup is invalid.',
+			error: {kind: 'match', index: 1},
 		});
 	});
 
