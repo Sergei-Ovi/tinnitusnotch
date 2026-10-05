@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {
 	type Audiogram,
 	AUDIOGRAM_FREQUENCIES,
+	audiogramReliable,
 	audiometryDone,
 	currentPresentation,
 	type Ear,
@@ -15,6 +16,9 @@ import {
 	type ThresholdTrack,
 } from './audiometry';
 import {MAX_LEVEL_DB, MIN_LEVEL_DB} from './levels';
+
+/** No catch trials. */
+const never = () => 1;
 
 /** Follows one threshold search, answering as a listener who hears everything at or above `threshold`. */
 function search(start: number, threshold: number, answer = (level: number) => level >= threshold) {
@@ -80,7 +84,7 @@ describe('audiometry', () => {
 		while (!audiometryDone(state)) {
 			const {ear, frequency, levelDb} = currentPresentation(state);
 			seen.add(`${ear}/${frequency}`);
-			state = respond(state, levelDb >= thresholds[ear](frequency));
+			state = respond(state, levelDb >= thresholds[ear](frequency), never);
 		}
 		expect(seen.size).toBe(PRESENTATION_COUNT);
 		expect(state.audiogram.right).toEqual([-65, -65, -65, -65, -65, -65, -25, -25, -25]);
@@ -89,8 +93,50 @@ describe('audiometry', () => {
 
 	it('starts each frequency a little above the last threshold in that ear', () => {
 		let state = startAudiometry();
-		while (state.index === 0) state = respond(state, currentPresentation(state).levelDb >= -70);
+		while (state.index === 0) state = respond(state, currentPresentation(state).levelDb >= -70, never);
 		expect(currentPresentation(state).levelDb).toBe(-55);
+	});
+
+	it('slips in silent presentations that leave the threshold search alone', () => {
+		let state = respond(startAudiometry(), true, () => 0);
+		const {track} = state;
+		expect(state.silent).toBe(true);
+		expect(currentPresentation(state).levelDb).toBe(-Infinity);
+
+		// "Yes" to silence is a false alarm; the next presentation is a tone at the same level.
+		state = respond(state, true, () => 0);
+		expect(state).toMatchObject({silent: false, falseAlarm: true, track});
+		expect(state.audiogram.catchTrials).toEqual({presented: 1, falseAlarms: 1});
+
+		state = respond(state, false, never);
+		expect(state.falseAlarm).toBe(false);
+		state = respond(state, false, () => 0);
+		state = respond(state, false, never);
+		expect(state.audiogram.catchTrials).toEqual({presented: 2, falseAlarms: 1});
+	});
+
+	it('gives roughly one silent presentation in ten, and none after the last tone', () => {
+		let seed = 1;
+		const random = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+		let state = startAudiometry();
+		let tones = 0;
+		while (!audiometryDone(state)) {
+			if (!state.silent) tones++;
+			const {frequency, levelDb} = currentPresentation(state);
+			state = respond(state, levelDb >= (frequency > 6000 ? -40 : -60), random);
+		}
+		const {presented, falseAlarms} = state.audiogram.catchTrials;
+		expect(falseAlarms).toBe(0);
+		expect(presented).toBeGreaterThan(tones * 0.05);
+		expect(presented).toBeLessThan(tones * 0.2);
+		expect(state.silent).toBe(false);
+	});
+
+	it('calls the audiogram unreliable after more than one false alarm', () => {
+		const base = audiogram(AUDIOGRAM_FREQUENCIES.map(() => -60));
+		expect(audiogramReliable(base)).toBe(true);
+		expect(audiogramReliable({...base, catchTrials: {presented: 10, falseAlarms: 1}})).toBe(true);
+		expect(audiogramReliable({...base, catchTrials: {presented: 10, falseAlarms: 2}})).toBe(false);
 	});
 });
 

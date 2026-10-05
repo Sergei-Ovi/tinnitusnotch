@@ -40,7 +40,9 @@ for relief, with no medical claims.
    separately, three pulsed beeps per presentation with a yes/no answer. Simplified Hughson-Westlake:
    down 10 dB / up 5 dB (up 10 until the first response), threshold = two responses at one level on
    the way up, at most 14 presentations per frequency; each frequency starts 15 dB above the previous
-   threshold. Thresholds are corrected by a rough normal-hearing curve; the largest rise ≥15 dB between
+   threshold. Catch trials: after a tone, a 1-in-10 chance the next presentation is silent; "yes" to it
+   gets a gentle hint, and more than one such "yes" marks the audiogram less reliable (shown with it;
+   its edge then sets no hypothesis). Thresholds are corrected by a rough normal-hearing curve; the largest rise ≥15 dB between
    neighbouring frequencies (either ear) is the edge, and its geometric middle the starting hypothesis.
    The hypothesis sets the first split of each run (on it, then ∓0.15 of the range); without one the
    default splits stay. The audiogram also equalises the sounds being compared (match, octave,
@@ -99,17 +101,13 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
 3. ✅ One session at a time across tabs: a Web Lock is held from the "before" rating until the
    session ends; another tab gets "already running in another tab" and leaves the draft alone.
    Session and match history sync between tabs. — PR #6.
-4. Catch trials in the hearing check: an occasional silent presentation; "yes" to silence lowers
-   confidence in the result (see open issues).
+4. ✅ Catch trials in the hearing check. — PR #7.
 5. Then the deferred list, starting with per-ear therapy (the audiogram already has both ears).
 
 ## Open issues
 
 - Matching tones are loudness-equalised only when the hearing check was done; after skipping it,
   with high-frequency hearing loss the user may need the level slider to hear the upper candidates.
-- The hearing check is a yes/no task without catch trials, so a listener who says "yes" to their own
-  tinnitus gets thresholds that are too low. Pulsed beeps and the hint to listen for the rhythm are
-  the only guard.
 
 ## Deferred
 

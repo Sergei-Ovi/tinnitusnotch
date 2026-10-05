@@ -2,6 +2,7 @@ import {clamp, MAX_FREQUENCY, MIN_FREQUENCY} from '@/lib/audio/scale';
 import {
 	type Audiogram,
 	type AudiometryState,
+	audiogramReliable,
 	audiometryDone,
 	hearingEdge,
 	respond,
@@ -107,17 +108,21 @@ export function startHearing(state: WizardState): WizardState {
 	return {...state, audiometry: startAudiometry()};
 }
 
-/** Answer to "did you hear the beeps?"; after the last one, moves on with the audiogram and its edge. */
-export function hearingResponse(state: WizardState, heard: boolean): WizardState {
+/**
+ * Answer to "did you hear the beeps?"; after the last one, moves on with the audiogram and its edge.
+ * An unreliable audiogram is kept, but its edge doesn't steer the comparisons.
+ */
+export function hearingResponse(state: WizardState, heard: boolean, random = Math.random): WizardState {
 	if (state.step !== 'hearing' || !state.audiometry) return state;
-	const audiometry = respond(state.audiometry, heard);
+	const audiometry = respond(state.audiometry, heard, random);
 	if (!audiometryDone(audiometry)) return {...state, audiometry};
+	const {audiogram} = audiometry;
 	return {
 		...state,
 		step: 'type',
 		audiometry: null,
-		audiogram: audiometry.audiogram,
-		hypothesis: hearingEdge(audiometry.audiogram)?.frequency ?? null,
+		audiogram,
+		hypothesis: audiogramReliable(audiogram) ? hearingEdge(audiogram)?.frequency ?? null : null,
 	};
 }
 

@@ -22,12 +22,29 @@ const ASCENDING_HITS = 2;
 const MAX_PRESENTATIONS = 14;
 /** The next frequency starts this far above the previous threshold, but no louder than the reference. */
 const START_ABOVE_PREVIOUS_DB = 15;
+/** Chance that a presentation is followed by a silent one (a catch trial); never two silent in a row. */
+export const CATCH_TRIAL_CHANCE = 0.1;
+/** "Yes" to this many silent presentations makes the thresholds unreliable: tinnitus was taken for beeps. */
+export const MAX_FALSE_ALARMS = 1;
 
 /**
  * Hearing thresholds in dB re ceiling, one per frequency (ascending);
  * null where nothing was heard at the loudest level.
  */
-export type Audiogram = {frequencies: number[]; left: (number | null)[]; right: (number | null)[]};
+export type Audiogram = {
+	frequencies: number[];
+	left: (number | null)[];
+	right: (number | null)[];
+	/** Silent presentations and "yes" answers to them; absent in audiograms made before catch trials. */
+	catchTrials?: CatchTrials;
+};
+
+export type CatchTrials = {presented: number; falseAlarms: number};
+
+/** Too many "yes" answers to silence: the thresholds are likely too low where tinnitus is. */
+export function audiogramReliable(audiogram: Audiogram) {
+	return (audiogram.catchTrials?.falseAlarms ?? 0) <= MAX_FALSE_ALARMS;
+}
 
 /** Threshold search at one frequency in one ear. */
 export type ThresholdTrack = {
@@ -83,7 +100,11 @@ export type AudiometryState = {
 	/** Position in the test sequence: each frequency in the right ear, then in the left. */
 	index: number;
 	track: ThresholdTrack;
-	audiogram: Audiogram;
+	/** The current presentation is a catch trial: nothing plays, the track waits. */
+	silent: boolean;
+	/** The previous answer was "yes" to a silent presentation. */
+	falseAlarm: boolean;
+	audiogram: Audiogram & {catchTrials: CatchTrials};
 };
 
 export function startAudiometry(): AudiometryState {
@@ -91,7 +112,12 @@ export function startAudiometry(): AudiometryState {
 	return {
 		index: 0,
 		track: startTrack(REFERENCE_DB),
-		audiogram: {frequencies: AUDIOGRAM_FREQUENCIES, left: empty(), right: empty()},
+		silent: false,
+		falseAlarm: false,
+		audiogram: {
+			frequencies: AUDIOGRAM_FREQUENCIES, left: empty(), right: empty(),
+			catchTrials: {presented: 0, falseAlarms: 0},
+		},
 	};
 }
 
@@ -99,14 +125,25 @@ export function audiometryDone(state: AudiometryState) {
 	return state.index >= SEQUENCE.length;
 }
 
-/** The sound to play now: a tone in one ear. */
+/** The sound to play now: a tone in one ear, or silence (level −∞) on a catch trial. */
 export function currentPresentation(state: AudiometryState) {
 	const {ear, frequency} = SEQUENCE[state.index];
-	return {ear, frequency, levelDb: state.track.levelDb};
+	return {ear, frequency, levelDb: state.silent ? -Infinity : state.track.levelDb};
 }
 
-export function respond(state: AudiometryState, heard: boolean): AudiometryState {
+export function respond(state: AudiometryState, heard: boolean, random = Math.random): AudiometryState {
 	if (audiometryDone(state)) return state;
+	if (state.silent) {
+		const {presented, falseAlarms} = state.audiogram.catchTrials;
+		const catchTrials = {presented: presented + 1, falseAlarms: falseAlarms + (heard ? 1 : 0)};
+		return {...state, silent: false, falseAlarm: heard, audiogram: {...state.audiogram, catchTrials}};
+	}
+	const next = respondTone(state, heard);
+	const silent = !audiometryDone(next) && random() < CATCH_TRIAL_CHANCE;
+	return {...next, silent, falseAlarm: false};
+}
+
+function respondTone(state: AudiometryState, heard: boolean): AudiometryState {
 	const step = respondTrack(state.track, heard);
 	if ('track' in step) return {...state, track: step.track};
 
@@ -119,7 +156,7 @@ export function respond(state: AudiometryState, heard: boolean): AudiometryState
 	const sameEar = index < SEQUENCE.length && SEQUENCE[index].ear === ear;
 	const previous = sameEar ? step.thresholdDb : null;
 	const start = previous === null ? REFERENCE_DB : Math.min(REFERENCE_DB, previous + START_ABOVE_PREVIOUS_DB);
-	return {index, track: startTrack(start), audiogram};
+	return {...state, index, track: startTrack(start), audiogram};
 }
 
 /**

@@ -128,7 +128,14 @@ function isInhibitionTrial(value: unknown): value is InhibitionTrial {
 
 function isAudiogram(value: unknown): value is Audiogram {
 	if (!isRecord(value) || !Array.isArray(value.frequencies) || !value.frequencies.length) return false;
-	const {frequencies, left, right} = value;
+	const {frequencies, left, right, catchTrials} = value;
 	return frequencies.every((f, i) => isNumber(f) && f > 0 && (i === 0 || f > frequencies[i - 1]))
-		&& [left, right].every(t => Array.isArray(t) && t.length === frequencies.length && t.every(isLevel));
+		&& [left, right].every(t => Array.isArray(t) && t.length === frequencies.length && t.every(isLevel))
+		&& (catchTrials === undefined || isCatchTrials(catchTrials));
+}
+
+function isCatchTrials(value: unknown) {
+	const isCount = (n: unknown) => Number.isInteger(n) && (n as number) >= 0;
+	return isRecord(value) && isCount(value.presented) && isCount(value.falseAlarms)
+		&& (value.falseAlarms as number) <= (value.presented as number);
 }

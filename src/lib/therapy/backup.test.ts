@@ -70,7 +70,7 @@ describe('backup', () => {
 	});
 
 	it('keeps the hearing test with a match, and reads matches made without one', () => {
-		const audiogram = {frequencies: [500, 1000], left: [-60, null], right: [-55, -50]};
+		const audiogram = {frequencies: [500, 1000], left: [-60, null], right: [-55, -50], catchTrials: {presented: 3, falseAlarms: 1}};
 		const backup = createBackup(settings, [], [{...match, audiogram}, {...match, id: 'old'}], new Date());
 		const result = parseBackup(JSON.stringify(backup));
 		expect(result.ok && result.backup.matches.map(m => m.audiogram)).toEqual([audiogram, undefined]);
@@ -81,6 +81,8 @@ describe('backup', () => {
 		data.matches[0].audiogram = {frequencies: [1000, 500], left: [-60, -60], right: [-60, -60]};
 		expect(parseBackup(JSON.stringify(data)).ok).toBe(false);
 		data.matches[0].audiogram = {frequencies: [500, 1000], left: [-60], right: [-60, -60]};
+		expect(parseBackup(JSON.stringify(data)).ok).toBe(false);
+		data.matches[0].audiogram = {frequencies: [500], left: [-60], right: [-60], catchTrials: {presented: 1, falseAlarms: 2}};
 		expect(parseBackup(JSON.stringify(data)).ok).toBe(false);
 	});
 

@@ -5,7 +5,7 @@ import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} f
 import {Slider, SliderFill, SliderLabel, SliderThumb, SliderTrack, SliderValueLabel} from '@/components/ui/slider';
 import {shiftOctaves} from '@/lib/audio/scale';
 import {formatClock, formatFrequency} from '@/lib/format';
-import {currentPresentation, PRESENTATION_COUNT} from '@/lib/matching/audiometry';
+import {audiogramReliable, currentPresentation, PRESENTATION_COUNT} from '@/lib/matching/audiometry';
 import {
 	alternativeFrequencies,
 	describeInhibition,
@@ -176,6 +176,12 @@ function HearingStep(props: {state: WizardState}) {
 					          </p>
 				          </>}
 				          footer={<Button variant="outline" onClick={matching.skipHearing}>Skip the check</Button>}>
+					<Show when={audiometry().falseAlarm}>
+						<p class="rounded-md bg-muted px-3 py-2 text-sm">
+							There were no beeps that time. Answer yes only when you hear the three beeps, not a
+							steady sound.
+						</p>
+					</Show>
 					<div class="flex items-center justify-between text-sm text-muted-foreground">
 						<span>Sound {audiometry().index + 1} of {PRESENTATION_COUNT}</span>
 						<span class="font-medium text-foreground">
@@ -198,6 +204,12 @@ function TypeStep(props: {state: WizardState}) {
 		<StepCard title="What does your tinnitus sound like?"
 		          description={<>
 			          <p>Listen to the examples if you are unsure. Pitch doesn't matter here, only the kind of sound.</p>
+			          <Show when={props.state.audiogram && !audiogramReliable(props.state.audiogram)}>
+				          <p class="rounded-md bg-muted px-3 py-2 text-foreground">
+					          You answered yes a few times when no beeps played, so the hearing check won't set where the
+					          comparisons start.
+				          </p>
+			          </Show>
 			          <Show when={props.state.hypothesis}>{hypothesis =>
 				          <p class="rounded-md bg-muted px-3 py-2 text-foreground">
 					          Your hearing drops off steeply around {formatFrequency(hypothesis())}; the comparisons
