@@ -176,12 +176,6 @@ function HearingStep(props: {state: WizardState}) {
 					          </p>
 				          </>}
 				          footer={<Button variant="outline" onClick={matching.skipHearing}>Skip the check</Button>}>
-					<Show when={audiometry().falseAlarm}>
-						<p class="rounded-md bg-muted px-3 py-2 text-sm">
-							There were no beeps that time. Answer yes only when you hear the three beeps, not a
-							steady sound.
-						</p>
-					</Show>
 					<div class="flex items-center justify-between text-sm text-muted-foreground">
 						<span>Sound {audiometry().index + 1} of {PRESENTATION_COUNT}</span>
 						<span class="font-medium text-foreground">
@@ -193,6 +187,13 @@ function HearingStep(props: {state: WizardState}) {
 						<Button variant="secondary" onClick={() => matching.hearingResponse(false)}>No</Button>
 						<Button onClick={() => matching.hearingResponse(true)}>Yes, I heard them</Button>
 					</div>
+					{/* Below the answers, so that showing it doesn't move them. */}
+					<Show when={audiometry().falseAlarm}>
+						<p class="rounded-md bg-muted px-3 py-2 text-sm">
+							There were no beeps that time. Answer yes only when you hear the three beeps, not a
+							steady sound.
+						</p>
+					</Show>
 				</StepCard>
 			);
 		}}</Show>
@@ -252,15 +253,7 @@ function CompareStep(props: {state: WizardState}) {
 
 	return (
 		<StepCard title="Which sound is closer to your tinnitus?"
-		          description={<>
-			          <p>Compare the pitch, not the loudness. Go with your first impression: there are no wrong answers.</p>
-			          <Show when={run().trial === 0 && run().index > 0}>
-				          <p class="rounded-md bg-muted px-3 py-2 text-foreground">
-					          Round {run().index + 1} of {RUNS}: the same task again, starting from different sounds.
-					          It's fine if your answers differ from the last round.
-				          </p>
-			          </Show>
-		          </>}
+		          description="Compare the pitch, not the loudness. Go with your first impression: there are no wrong answers."
 		          footer={<Button variant="outline" onClick={matching.playPair}>Replay both</Button>}>
 			<div class="flex items-center justify-between text-sm text-muted-foreground">
 				<span>Comparison {number()} of {RUNS * TRIALS_PER_RUN}</span>
@@ -282,6 +275,13 @@ function CompareStep(props: {state: WizardState}) {
 			<Button variant="secondary" class="w-full" onClick={() => matching.answer('same')}>
 				About the same
 			</Button>
+			{/* Below the answers, and for the whole round, so that it doesn't move them. */}
+			<Show when={run().index > 0}>
+				<p class="rounded-md bg-muted px-3 py-2 text-sm">
+					Round {run().index + 1} of {RUNS}: the same task again, starting from different sounds.
+					It's fine if your answers differ from the last round.
+				</p>
+			</Show>
 			<LevelSlider label="Level, if a sound is hard to hear"/>
 		</StepCard>
 	);

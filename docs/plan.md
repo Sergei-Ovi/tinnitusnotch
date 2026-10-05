@@ -96,10 +96,11 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
 
 ## Next
 
-1. Check stages 4–5 by ear on real headphones: beep levels and left/right panning in the hearing
-   check; level and comfort of the 60 s after-effect noise. Measured at the output (headless Chromium):
-   levels match `levelDb` within 0.1 dB (a −30 dB tone is −45.1 dBFS RMS), one-ear beeps leave the
-   other channel silent, noise probes have the same RMS as tones; what's left is the listening.
+1. ✅ Stages 4–5 checked by ear on real headphones: beep levels, left/right panning, the after-effect
+   noise — as intended. Measured at the output too (headless Chromium): levels match `levelDb` within
+   0.1 dB (a −30 dB tone is −45.1 dBFS RMS), one-ear beeps leave the other channel silent, noise probes
+   have the same RMS as tones. Notices that appear mid-step (false-alarm hint, round 2–3 note) sit
+   below the answer buttons, so they don't move them. — PR #9.
 2. ✅ `skipLibCheck` in tsconfig: `tsc` passes. — PR #6.
 3. ✅ One session at a time across tabs: a Web Lock is held from the "before" rating until the
    session ends; another tab gets "already running in another tab" and leaves the draft alone.
