@@ -79,7 +79,8 @@ Tabs: Therapy / Setup / History (opens on Setup until the first session is saved
 2. ✅ Therapy screen: timer, 0–10 diary, history, export/import. — PR #2, merged.
 3. ✅ Matching wizard: calibration → type → 2AFC ×3 + octave check → fine-tune → loudness match.
    — PR #3, merged.
-4. ✅ Hearing check → starting hypothesis, level equalisation, audiogram on the result. — PR #4.
+4. ✅ Hearing check → starting hypothesis, level equalisation, audiogram on the result.
+   — PR #4, merged.
 5. ⏭ Residual inhibition + Progress screen.
 
 Each stage keeps its procedure logic in pure modules (`src/lib/…`) with Vitest, and is checked

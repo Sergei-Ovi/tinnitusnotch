@@ -36,7 +36,8 @@ Your app is ready to be deployed!
 
 ### `npm test`
 
-Runs the unit tests (Vitest) for the audio logic in `src/lib/audio`.
+Runs the unit tests (Vitest) for the pure logic in `src/lib`: audio synthesis, matching procedure,
+hearing check, therapy sessions and backup.
 
 ## Deployment
 
