@@ -46,7 +46,8 @@ for relief, with no medical claims.
    neighbouring frequencies (either ear) is the edge, and its geometric middle the starting hypothesis.
    The hypothesis sets the first split of each run (on it, then ∓0.15 of the range); without one the
    default splits stay. The audiogram also equalises the sounds being compared (match, octave,
-   fine-tune) to the same level above threshold as 1 kHz, better ear, within −15…+30 dB.
+   fine-tune) to the same level above threshold as 1 kHz, better ear, within −15…+30 dB; when the
+   check is skipped, by the normal hearing curve instead.
 4. 2AFC: "which of A/B is closer to your tinnitus?", log-scale bisection over 500 Hz–12 kHz,
    8 trials per run (candidates are the centres of the two halves, 10% overlap past the split,
    "about the same" keeps the stretch between them; A/B order random). Three runs with different
@@ -96,7 +97,9 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
 ## Next
 
 1. Check stages 4–5 by ear on real headphones: beep levels and left/right panning in the hearing
-   check; level and comfort of the 60 s after-effect noise.
+   check; level and comfort of the 60 s after-effect noise. Measured at the output (headless Chromium):
+   levels match `levelDb` within 0.1 dB (a −30 dB tone is −45.1 dBFS RMS), one-ear beeps leave the
+   other channel silent, noise probes have the same RMS as tones; what's left is the listening.
 2. ✅ `skipLibCheck` in tsconfig: `tsc` passes. — PR #6.
 3. ✅ One session at a time across tabs: a Web Lock is held from the "before" rating until the
    session ends; another tab gets "already running in another tab" and leaves the draft alone.
@@ -106,8 +109,8 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
 
 ## Open issues
 
-- Matching tones are loudness-equalised only when the hearing check was done; after skipping it,
-  with high-frequency hearing loss the user may need the level slider to hear the upper candidates.
+- Without the hearing check, matching sounds are equalised for normal hearing; with high-frequency
+  hearing loss the user may still need the level slider to hear the upper candidates.
 
 ## Deferred
 
