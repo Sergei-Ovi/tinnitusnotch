@@ -86,7 +86,7 @@ Tabs: Therapy / Setup / Progress (opens on Setup until the first session is save
    — PR #3, merged.
 4. ✅ Hearing check → starting hypothesis, level equalisation, audiogram on the result.
    — PR #4, merged.
-5. ✅ Residual inhibition + Progress screen. — PR #5.
+5. ✅ Residual inhibition + Progress screen. — PR #5, merged.
 
 Each stage keeps its procedure logic in pure modules (`src/lib/…`) with Vitest, and is checked
 end-to-end in a headless browser before the PR; sound itself is checked by ear.
