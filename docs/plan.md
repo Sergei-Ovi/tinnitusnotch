@@ -19,7 +19,13 @@ for relief, with no medical claims.
 - One frequency for both ears; mono playback. Per-ear therapy — later.
 - Desktop only for now; UI in English.
 - Hard volume ceiling in code; therapy level hint: at or below tinnitus loudness, tinnitus stays audible.
-- Data in localStorage with JSON export/import.
+- Data in localStorage with JSON export/import. Import merges sessions by id; settings are restored
+  only into an empty history (new device).
+- Sessions: 15 / 30 / 45 / 60 min timer, 30 by default. Loudness rating 0–10 before and after, both
+  skippable. Sessions under a minute are not saved; a session cut off by closing the tab is saved
+  with the time listened (checkpointed every 15 s).
+- Screens are tabs: Therapy / Setup / History. The session owns the audio output: the matching tone
+  is disabled while a session is active.
 - Analytics (umami): anonymous events only (wizard step reached/abandoned, session start/finish with
   duration). No frequencies or ratings.
 - Procedure logic lives in pure modules without Web Audio, covered by Vitest.
@@ -43,18 +49,34 @@ for relief, with no medical claims.
 
 ## Screens
 
-- **Setup** — wizard (mandatory on first run, re-runnable) + manual mode.
-- **Therapy** — player, timer, noise colour, notch width, 0–10 rating before/after.
-- **Progress** — audiogram, frequency and session history.
+Tabs: Therapy / Setup / History (opens on Setup until the first session is saved).
+
+- **Setup** — manual matching now (tone, log slider, octave/semitone steps, interactive spectrum);
+  the wizard will be added here (mandatory on first run, re-runnable), manual mode stays.
+- **Therapy** — session timer, noise colour, notch width, volume, 0–10 rating before/after.
+- **History** — stats and session list with export/import; becomes **Progress** in stage 5
+  (audiogram, frequency history, rating trend).
 
 ## Stages (one PR each)
 
-1. Core fixes: log frequency scale, single volume scale, fades without clicks, octave notch,
-   noise colours, volume ceiling, disclaimer.
-2. Therapy screen: timer, 0–10 diary, history, export/import.
-3. Matching wizard: calibration → type → 2AFC ×3 + octave check → loudness match.
+1. ✅ Core fixes: log frequency scale, single volume scale, fades without clicks, octave notch,
+   noise colours, volume ceiling, disclaimer. — PR #1, awaiting manual listening check.
+2. ✅ Therapy screen: timer, 0–10 diary, history, export/import. — PR #2 (stacked on #1),
+   awaiting manual listening check.
+3. ⏭ Matching wizard: calibration → type → 2AFC ×3 + octave check → loudness match.
 4. Audiometry → starting hypothesis.
 5. Residual inhibition + Progress screen.
+
+Each stage keeps its procedure logic in pure modules (`src/lib/…`) with Vitest, and is checked
+end-to-end in a headless browser before the PR; sound itself is checked by ear.
+
+## Open issues
+
+- `tsc` fails on @kobalte/core typings in node_modules (no `skipLibCheck` in tsconfig); our code is
+  clean. Fix: add `skipLibCheck` or upgrade kobalte.
+- Session stats (today / 7 days) are computed on render and don't roll over at midnight while the
+  History tab stays open.
+- Only one browser tab should run sessions: two open tabs share one localStorage draft.
 
 ## Deferred
 
