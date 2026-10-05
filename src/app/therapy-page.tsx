@@ -15,6 +15,7 @@ const NOTICES = {
 	'saved': 'Session saved.',
 	'too-short': 'The session was shorter than a minute and was not saved.',
 	'recovered': 'An unfinished session from last time was saved with the time you listened.',
+	'other-tab': 'A session is already running in another tab. Finish it there, or close that tab.',
 };
 
 export function TherapyPage(props: {onOpenSetup: () => void}) {

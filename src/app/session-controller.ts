@@ -14,13 +14,15 @@ import {
 	startClock,
 } from '@/lib/therapy/session';
 import {makePersisted} from '@solid-primitives/storage';
-import {createRoot, createSignal} from 'solid-js';
+import {createEffect, createRoot, createSignal} from 'solid-js';
 
 export type SessionPhase = 'idle' | 'rating-before' | 'running' | 'paused' | 'rating-after';
-export type SessionNotice = 'saved' | 'too-short' | 'recovered' | null;
+export type SessionNotice = 'saved' | 'too-short' | 'recovered' | 'other-tab' | null;
 
 const TICK_MS = 1000;
 const CHECKPOINT_EVERY_TICKS = 15;
+/** Web Lock held by the tab whose session owns the draft, from the "before" rating until idle again. */
+const SESSION_LOCK = 'therapy-session';
 
 /**
  * Therapy session lifecycle: rating before → running ⇄ paused → rating after → saved.
@@ -35,6 +37,24 @@ export const session = createRoot(() => {
 
 	let timer: ReturnType<typeof setInterval> | undefined;
 	let ticks = 0;
+	let releaseLock: (() => void) | undefined;
+	let locking = false;
+
+	/** Takes the session lock and holds it until `unlock`; false when another tab holds it. */
+	function lock(): Promise<boolean> {
+		if (!navigator.locks) return Promise.resolve(true);
+		return new Promise(granted => {
+			navigator.locks.request(SESSION_LOCK, {ifAvailable: true}, held => {
+				granted(held !== null);
+				if (held) return new Promise<void>(resolve => releaseLock = resolve);
+			});
+		});
+	}
+
+	function unlock() {
+		releaseLock?.();
+		releaseLock = undefined;
+	}
 
 	function save(ratingAfter: Rating) {
 		const d = draft();
@@ -46,7 +66,13 @@ export const session = createRoot(() => {
 	}
 
 	// A draft left over from a closed tab: keep the time it recorded, without the "after" rating.
-	if (draft()) setNotice(save(null) ? 'recovered' : null);
+	// While the lock is taken, the draft belongs to a session running in another tab.
+	if (draft()) {
+		void lock().then(free => {
+			if (free && draft()) setNotice(save(null) ? 'recovered' : null);
+			unlock();
+		});
+	}
 
 	function checkpoint() {
 		const d = draft();
@@ -81,9 +107,14 @@ export const session = createRoot(() => {
 	}
 
 	/** Asks for the "before" rating; playback starts once it is answered or skipped. */
-	function begin() {
+	async function begin() {
+		if (phase() !== 'idle' || locking) return;
 		setNotice(null);
-		setPhase('rating-before');
+		locking = true;
+		const free = await lock();
+		locking = false;
+		if (free) setPhase('rating-before');
+		else setNotice('other-tab');
 	}
 
 	function start(ratingBefore: Rating) {
@@ -156,6 +187,10 @@ export const session = createRoot(() => {
 		if (phase() === 'rating-before') setPhase('idle');
 	}
 
+	createEffect(() => {
+		if (phase() === 'idle') unlock();
+	});
+
 	window.addEventListener('pagehide', checkpoint);
 	document.addEventListener('visibilitychange', () => {
 		if (document.visibilityState === 'hidden') checkpoint();
@@ -164,6 +199,8 @@ export const session = createRoot(() => {
 	return {
 		phase,
 		notice,
+		/** A session draft is stored: one left from a closed tab, or one running in another tab. */
+		hasDraft: () => draft() !== null,
 		/** Whether a session owns the audio output: other playback must wait. */
 		active: () => phase() !== 'idle',
 		remainingMs: () => {

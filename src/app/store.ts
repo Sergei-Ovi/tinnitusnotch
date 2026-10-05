@@ -3,7 +3,7 @@ import type {NoiseColor} from '@/lib/audio/noise-spectrum';
 import {clamp, MAX_FREQUENCY, MIN_FREQUENCY} from '@/lib/audio/scale';
 import type {MatchResult} from '@/lib/matching/wizard';
 import {DEFAULT_SESSION_MINUTES, type Session, type TherapySettings} from '@/lib/therapy/session';
-import {makePersisted} from '@solid-primitives/storage';
+import {makePersisted, storageSync} from '@solid-primitives/storage';
 import {createEffect, createRoot, createSignal} from 'solid-js';
 
 export const MIN_NOTCH_WIDTH = 0.25;
@@ -18,9 +18,10 @@ export const store = createRoot(() => {
 	const [notchWidth, setNotchWidthRaw] = makePersisted(createSignal(1), {name: 'notch-width'});
 	const [noiseColor, setNoiseColor] = makePersisted(createSignal<NoiseColor>('pink'), {name: 'noise-color'});
 	const [sessionMinutes, setSessionMinutes] = makePersisted(createSignal(DEFAULT_SESSION_MINUTES), {name: 'session-minutes'});
-	const [sessions, setSessions] = makePersisted(createSignal<Session[]>([]), {name: 'sessions'});
+	// History is synced from other tabs, so that saving here doesn't overwrite what they saved.
+	const [sessions, setSessions] = makePersisted(createSignal<Session[]>([]), {name: 'sessions', sync: storageSync});
 	/** Finished frequency matchings, newest first. */
-	const [matches, setMatches] = makePersisted(createSignal<MatchResult[]>([]), {name: 'matches'});
+	const [matches, setMatches] = makePersisted(createSignal<MatchResult[]>([]), {name: 'matches', sync: storageSync});
 
 	const [playState, setPlayState] = createSignal<PlayState>('idle');
 
