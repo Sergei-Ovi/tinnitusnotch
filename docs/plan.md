@@ -91,6 +91,16 @@ Tabs: Therapy / Setup / Progress (opens on Setup until the first session is save
 Each stage keeps its procedure logic in pure modules (`src/lib/…`) with Vitest, and is checked
 end-to-end in a headless browser before the PR; sound itself is checked by ear.
 
+## Next
+
+1. Check stages 4–5 by ear on real headphones: beep levels and left/right panning in the hearing
+   check; level and comfort of the 60 s after-effect noise.
+2. Add `skipLibCheck` to tsconfig, so `tsc` passes without the flag (see open issues).
+3. Guard against two tabs running sessions at once (see open issues).
+4. Catch trials in the hearing check: an occasional silent presentation; "yes" to silence lowers
+   confidence in the result (see open issues).
+5. Then the deferred list, starting with per-ear therapy (the audiogram already has both ears).
+
 ## Open issues
 
 - `tsc` fails on @kobalte/core typings in node_modules (no `skipLibCheck` in tsconfig); our code is
