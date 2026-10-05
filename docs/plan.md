@@ -23,7 +23,7 @@ for relief, with no medical claims.
   only into an empty history (new device).
 - Sessions: 15 / 30 / 45 / 60 min timer, 30 by default. Loudness rating 0–10 before and after, both
   skippable. Sessions under a minute are not saved; a session cut off by closing the tab is saved
-  with the time listened (checkpointed every 15 s).
+  with the time listened (checkpointed every 15 s). One session at a time across browser tabs.
 - Screens are tabs: Therapy / Setup / History. The session owns the audio output: the matching tone
   is disabled while a session is active.
 - Analytics (umami): anonymous events only (wizard step reached/abandoned, session start/finish with
@@ -95,17 +95,16 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
 
 1. Check stages 4–5 by ear on real headphones: beep levels and left/right panning in the hearing
    check; level and comfort of the 60 s after-effect noise.
-2. Add `skipLibCheck` to tsconfig, so `tsc` passes without the flag (see open issues).
-3. Guard against two tabs running sessions at once (see open issues).
+2. ✅ `skipLibCheck` in tsconfig: `tsc` passes. — PR #6.
+3. ✅ One session at a time across tabs: a Web Lock is held from the "before" rating until the
+   session ends; another tab gets "already running in another tab" and leaves the draft alone.
+   Session and match history sync between tabs. — PR #6.
 4. Catch trials in the hearing check: an occasional silent presentation; "yes" to silence lowers
    confidence in the result (see open issues).
 5. Then the deferred list, starting with per-ear therapy (the audiogram already has both ears).
 
 ## Open issues
 
-- `tsc` fails on @kobalte/core typings in node_modules (no `skipLibCheck` in tsconfig); our code is
-  clean. Fix: add `skipLibCheck` or upgrade kobalte.
-- Only one browser tab should run sessions: two open tabs share one localStorage draft.
 - Matching tones are loudness-equalised only when the hearing check was done; after skipping it,
   with high-frequency hearing loss the user may need the level slider to hear the upper candidates.
 - The hearing check is a yes/no task without catch trials, so a listener who says "yes" to their own

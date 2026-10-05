@@ -17,7 +17,7 @@ const TABS: {id: Tab; label: string}[] = [
 
 export function IndexPage() {
 	// First visit: start by finding the frequency.
-	const [tab, setTab] = createSignal<Tab>(store.sessions().length || session.notice() ? 'therapy' : 'setup');
+	const [tab, setTab] = createSignal<Tab>(store.sessions().length || session.hasDraft() ? 'therapy' : 'setup');
 
 	return (
 		<div class="w-full space-y-6">
