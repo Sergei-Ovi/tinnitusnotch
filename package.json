@@ -1,7 +1,7 @@
 {
-  "name": "vite-template-solid",
-  "version": "0.0.0",
-  "description": "",
+  "name": "tinnitusnotch",
+  "version": "1.0.0",
+  "description": "Notched sound therapy for tinnitus, with guided frequency matching and a progress diary",
   "type": "module",
   "scripts": {
     "start": "vite",

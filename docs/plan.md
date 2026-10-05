@@ -95,6 +95,12 @@ Tabs: Therapy / Setup / Progress (opens on Setup until the first session is save
 Each stage keeps its procedure logic in pure modules (`src/lib/…`) with Vitest, and is checked
 end-to-end in a headless browser before the PR; sound itself is checked by ear.
 
+## Release
+
+v1.0.0 — all of the above, interface in English and Russian. Public at
+<https://sergei-ovi.github.io/tinnitusnotch/> (repository Sergei-Ovi/tinnitusnotch, GitHub Pages,
+deployed by `.github/workflows/main.yml` on every push to `main`).
+
 ## Next
 
 1. ✅ Stages 4–5 checked by ear on real headphones: beep levels, left/right panning, the after-effect
