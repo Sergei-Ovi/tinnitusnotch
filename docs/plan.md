@@ -25,10 +25,11 @@ for relief, with no medical claims.
 - Sessions: 15 / 30 / 45 / 60 min timer, 30 by default. Loudness rating 0–10 before and after, both
   skippable. Sessions under a minute are not saved; a session cut off by closing the tab is saved
   with the time listened (checkpointed every 15 s). One session at a time across browser tabs.
-- Screens are tabs: Therapy / Setup / History. The session owns the audio output: the matching tone
+- Screens are tabs: Therapy / Setup / Progress. The session owns the audio output: the matching tone
   is disabled while a session is active.
 - Analytics (umami): anonymous events only (wizard step reached/abandoned, session start/finish with
-  duration). No frequencies or ratings.
+  duration). No frequencies or ratings. No script at all unless `UMAMI_WEBSITE_ID` and
+  `UMAMI_SCRIPT_SRC` are set at build time.
 - Procedure logic lives in pure modules without Web Audio, covered by Vitest.
 
 ## Frequency auto-matching
@@ -71,7 +72,8 @@ The audiogram is kept with its match (optional field, absent in older matches).
 
 ## Screens
 
-Tabs: Therapy / Setup / Progress (opens on Setup until the first session is saved).
+Header: app name and the EN/RU switch. Tabs: Therapy / Setup / Progress (opens on Setup until the
+first session is saved).
 
 - **Setup** — the matching wizard (the only option on first run, with an "I know my frequency" way
   out; re-runnable) and its last result, plus manual matching (tone, log slider, octave/semitone
@@ -84,35 +86,78 @@ Tabs: Therapy / Setup / Progress (opens on Setup until the first session is save
 ## Stages (one PR each)
 
 1. ✅ Core fixes: log frequency scale, single volume scale, fades without clicks, octave notch,
-   noise colours, volume ceiling, disclaimer. — PR #1, merged.
-2. ✅ Therapy screen: timer, 0–10 diary, history, export/import. — PR #2, merged.
+   noise colours, volume ceiling, disclaimer. — PR #1.
+2. ✅ Therapy screen: timer, 0–10 diary, history, export/import. — PR #2.
 3. ✅ Matching wizard: calibration → type → 2AFC ×3 + octave check → fine-tune → loudness match.
-   — PR #3, merged.
-4. ✅ Hearing check → starting hypothesis, level equalisation, audiogram on the result.
-   — PR #4, merged.
-5. ✅ Residual inhibition + Progress screen. — PR #5, merged.
+   — PR #3.
+4. ✅ Hearing check → starting hypothesis, level equalisation, audiogram on the result. — PR #4.
+5. ✅ Residual inhibition + Progress screen. — PR #5.
+6. ✅ `skipLibCheck` in tsconfig, so `tsc` passes. One session at a time across tabs: a Web Lock
+   (`therapy-session`) is held from the "before" rating until the session is idle again; another tab
+   gets "already running in another tab" and leaves the draft alone. `sessions` and `matches` sync
+   between tabs (`storageSync`), so a save in one tab doesn't overwrite another's. — PR #6.
+7. ✅ Catch trials in the hearing check (see Frequency auto-matching, 3). — PR #7.
+8. ✅ Without the hearing check, compared sounds are equalised by the normal hearing curve
+   (`NORMAL_AUDIOGRAM`). — PR #8.
+9. ✅ Stages 4–5 checked by ear on real headphones: beep levels, left/right panning, the after-effect
+   noise — as intended. Notices that appear mid-step (false-alarm hint, round 2–3 note) moved below
+   the answer buttons, so they don't move them. — PR #9.
+10. ✅ Interface in English and Russian (see Decisions). `lib` stays locale-free: `parseBackup`
+    returns error codes, wording lives in the dictionaries. — PR #10.
+11. ✅ Release 1.0.0: README, version, analytics only when configured. — PR #11.
 
 Each stage keeps its procedure logic in pure modules (`src/lib/…`) with Vitest, and is checked
 end-to-end in a headless browser before the PR; sound itself is checked by ear.
 
 ## Release
 
-v1.0.0 — all of the above, interface in English and Russian. Public at
-<https://sergei-ovi.github.io/tinnitusnotch/> (repository Sergei-Ovi/tinnitusnotch, GitHub Pages,
-deployed by `.github/workflows/main.yml` on every push to `main`).
+v1.0.0 (2026-10-05) — stages 1–11. Public at <https://sergei-ovi.github.io/tinnitusnotch/>;
+release notes: <https://github.com/Sergei-Ovi/tinnitusnotch/releases/tag/v1.0.0>.
+
+## Repositories and deployment
+
+- **Development** — `Sergei-Ovi/tinnitusnotch-private` (private, git remote `origin`). Work goes in
+  branches, one PR per stage, merged into `main`. The original project is
+  `vladplskv/tinnitusnotch` (remote `upstream`).
+- **Public site** — `Sergei-Ovi/tinnitusnotch` (public, remote `public`). GitHub Pages is built by
+  `.github/workflows/main.yml` on every push to its `main`; the base path is the repository name
+  (`/tinnitusnotch/`). A private repository can't serve Pages on the free plan, hence two repositories.
+- **Deploying** is a separate step: merging into `origin/main` doesn't change the site.
+
+```bash
+git push public main                  # deploy what's on main
+gh run list -R Sergei-Ovi/tinnitusnotch --limit 1   # watch the Pages build
+```
+
+- **Releasing** a version:
+  1. bump `version` in `package.json` in a PR, merge it;
+  2. `git tag -a vX.Y.Z -m "Tinnitus Notch X.Y.Z"`, then `git push origin vX.Y.Z` and
+     `git push public main vX.Y.Z`;
+  3. `gh release create vX.Y.Z -R Sergei-Ovi/tinnitusnotch` with notes for users;
+  4. note the version in the Release section above.
+- If the Pages deploy step fails right after Pages was (re)configured, re-run it:
+  `gh run rerun <id> -R Sergei-Ovi/tinnitusnotch`.
+
+## Verification
+
+- `pnpm test` (Vitest) for everything in `src/lib` and the dictionaries in `src/i18n`; `npx tsc --noEmit`.
+- End-to-end in headless Chromium with `playwright-core` from a scratch directory (not a project
+  dependency) against `vite preview` (port 4173) or `vite` (dev, needed to `import('/src/…')`
+  modules from the page). Useful techniques:
+  - force catch trials or A/B order with `Math.random = () => 0` in an init script;
+  - meter the output per channel by hooking `AudioNode.prototype.connect` to the destination and
+    feeding a 2-channel up-mixing GainNode → ChannelSplitter → two AnalyserNodes;
+  - set the browser `locale` explicitly (`en-US` / `ru-RU`): the default follows the system language;
+  - for layout shifts compare `boundingBox()` of the answer buttons before and after a state change.
+- Check a Pages-like build locally: `BASE_PATH=/tinnitusnotch/ pnpm build`, then `vite preview` and
+  open `/tinnitusnotch/`. In Git Bash prefix with `MSYS_NO_PATHCONV=1`, or the path gets mangled.
+- Sound is finally checked by ear on real headphones.
+- Windows notes: in PowerShell with script execution disabled use `npm.cmd`; port 3000 may be taken
+  by another dev server, use `--port`.
 
 ## Next
 
-1. ✅ Stages 4–5 checked by ear on real headphones: beep levels, left/right panning, the after-effect
-   noise — as intended. Measured at the output too (headless Chromium): levels match `levelDb` within
-   0.1 dB (a −30 dB tone is −45.1 dBFS RMS), one-ear beeps leave the other channel silent, noise probes
-   have the same RMS as tones. Notices that appear mid-step (false-alarm hint, round 2–3 note) sit
-   below the answer buttons, so they don't move them. — PR #9.
-2. ✅ `skipLibCheck` in tsconfig: `tsc` passes. — PR #6.
-3. ✅ One session at a time across tabs: a Web Lock is held from the "before" rating until the
-   session ends; another tab gets "already running in another tab" and leaves the draft alone.
-   Session and match history sync between tabs. — PR #6.
-4. ✅ Catch trials in the hearing check. — PR #7.
+Nothing planned. New work starts as an item here, then becomes a stage with its own PR.
 
 ## Open issues
 

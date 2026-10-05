@@ -40,7 +40,7 @@ Stack: [Solid](https://solidjs.com), Vite, Tailwind, Web Audio API.
 ```bash
 pnpm install     # or npm install
 pnpm dev         # http://localhost:3000
-pnpm test        # Vitest
+pnpm test        # Vitest: matching, hearing check, sessions, backup, audio synthesis, translations
 pnpm build       # production build into dist/
 ```
 
@@ -48,9 +48,10 @@ On Windows PowerShell with script execution disabled, use `npm.cmd` instead of `
 
 ## Deployment
 
-Every push to `main` builds and deploys to GitHub Pages (`.github/workflows/main.yml`); the base path is
-the repository name. Set the repository variables `UMAMI_WEBSITE_ID` and `UMAMI_SCRIPT_SRC` to enable
-analytics; without them no analytics script is added.
+Every push to `main` of the public repository builds and deploys to GitHub Pages
+(`.github/workflows/main.yml`); the base path is the repository name. Set the repository variables
+`UMAMI_WEBSITE_ID` and `UMAMI_SCRIPT_SRC` to enable analytics; without them no analytics script is added.
+Repositories, the release process and how changes are verified: [docs/plan.md](docs/plan.md).
 
 ## Credits
 
