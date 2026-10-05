@@ -1,4 +1,5 @@
 import {NOISE_COLORS} from '@/lib/audio/noise-spectrum';
+import {type MatchResult, TINNITUS_TYPES} from '@/lib/matching/wizard';
 import type {Rating, Session, TherapySettings} from './session';
 
 export const BACKUP_APP = 'tinnitusnotch';
@@ -10,10 +11,12 @@ export type Backup = {
 	exportedAt: string;
 	settings: TherapySettings;
 	sessions: Session[];
+	/** Frequency matchings; absent in backups made before the matching wizard. */
+	matches: MatchResult[];
 };
 
-export function createBackup(settings: TherapySettings, sessions: Session[], now: Date): Backup {
-	return {app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), settings, sessions};
+export function createBackup(settings: TherapySettings, sessions: Session[], matches: MatchResult[], now: Date): Backup {
+	return {app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), settings, sessions, matches};
 }
 
 export type ParseResult = {ok: true; backup: Backup} | {ok: false; error: string};
@@ -42,6 +45,14 @@ export function parseBackup(text: string): ParseResult {
 	if (bad >= 0) {
 		return {ok: false, error: `Session #${bad + 1} in the backup is invalid.`};
 	}
+	const matches = data.matches ?? [];
+	if (!Array.isArray(matches)) {
+		return {ok: false, error: 'The backup has an invalid match list.'};
+	}
+	const badMatch = matches.findIndex(m => !isMatch(m));
+	if (badMatch >= 0) {
+		return {ok: false, error: `Frequency match #${badMatch + 1} in the backup is invalid.`};
+	}
 	return {
 		ok: true,
 		backup: {
@@ -50,6 +61,7 @@ export function parseBackup(text: string): ParseResult {
 			exportedAt: String(data.exportedAt ?? ''),
 			settings: data.settings,
 			sessions: data.sessions,
+			matches,
 		},
 	};
 }
@@ -84,4 +96,21 @@ function isSession(value: unknown): value is Session {
 		&& isRating(value.ratingBefore)
 		&& isRating(value.ratingAfter)
 		&& isSettings(value);
+}
+
+function isLevel(value: unknown) {
+	return value === null || (isNumber(value) && value <= 0);
+}
+
+function isMatch(value: unknown): value is MatchResult {
+	return isRecord(value)
+		&& typeof value.id === 'string' && value.id.length > 0
+		&& typeof value.date === 'string' && !Number.isNaN(Date.parse(value.date))
+		&& TINNITUS_TYPES.includes(value.type as never)
+		&& isNumber(value.frequency) && value.frequency > 0
+		&& Array.isArray(value.estimates) && value.estimates.every(e => isNumber(e) && e > 0)
+		&& isNumber(value.spreadOctaves) && value.spreadOctaves >= 0
+		&& typeof value.reliable === 'boolean'
+		&& isLevel(value.thresholdDb)
+		&& isLevel(value.loudnessDb);
 }

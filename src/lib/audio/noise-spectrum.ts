@@ -73,6 +73,48 @@ export function synthesizeNoise(options: NoiseOptions): Float32Array {
 	return out;
 }
 
+export type BandNoiseOptions = {
+	/** Buffer length in samples, power of two. The buffer loops seamlessly. */
+	length: number;
+	sampleRate: number;
+	center: number;
+	widthOctaves: number;
+	/** RMS of the result. */
+	rms: number;
+	random?: () => number;
+};
+
+/**
+ * Narrowband noise: flat power inside a band around `center` and nothing outside it, a hiss with a
+ * pitch. Used to match hissing tinnitus, the way a pure tone matches a tonal one.
+ */
+export function synthesizeBandNoise(options: BandNoiseOptions): Float32Array {
+	const {length: n, sampleRate, center, widthOctaves, rms, random = Math.random} = options;
+	const re = new Float64Array(n);
+	const im = new Float64Array(n);
+	const binWidth = sampleRate / n;
+	const band = notchBand(center, widthOctaves);
+
+	let power = 0;
+	for (let k = Math.max(1, Math.ceil(band.low / binWidth)); k <= band.high / binWidth && k < n / 2; k++) {
+		const phase = random() * 2 * Math.PI;
+		re[k] = Math.cos(phase);
+		im[k] = Math.sin(phase);
+		re[n - k] = re[k];
+		im[n - k] = -im[k];
+		power++;
+	}
+
+	fft(re, im, true);
+
+	const bandRms = Math.sqrt(2 * power) / n;
+	const scale = bandRms > 0 ? rms / bandRms : 0;
+
+	const out = new Float32Array(n);
+	for (let i = 0; i < n; i++) out[i] = re[i] * scale;
+	return out;
+}
+
 /** Smallest power of two holding at least `seconds` of audio. */
 export function loopLength(sampleRate: number, seconds: number) {
 	return 2 ** Math.ceil(Math.log2(sampleRate * seconds));

@@ -1,3 +1,5 @@
+import {matching} from '@/app/matching-controller';
+import {MatchingWizard} from '@/app/matching-wizard';
 import {session} from '@/app/session-controller';
 import {store} from '@/app/store';
 import {Spectrum} from '@/components/spectrum';
@@ -14,10 +16,92 @@ import {
 	shiftOctaves,
 } from '@/lib/audio/scale';
 import {formatFrequency} from '@/lib/format';
-import {onCleanup, Show} from 'solid-js';
+import {sensationLevel} from '@/lib/matching/wizard';
+import {createSignal, onCleanup, Show} from 'solid-js';
 
-/** Manual frequency matching with a pure tone. The guided wizard will live here too. */
-export function SetupPage() {
+const dateFormat = new Intl.DateTimeFormat(undefined, {day: 'numeric', month: 'short', year: 'numeric'});
+
+/**
+ * Finding the tinnitus frequency: the guided matching, or the manual tone.
+ * On first run only the guided matching is offered, with a way out for those who know their frequency.
+ */
+export function SetupPage(props: {onOpenTherapy: () => void}) {
+	const [manual, setManual] = createSignal(false);
+	const firstRun = () => !store.matches().length && !store.sessions().length;
+
+	return (
+		<Show when={matching.state()} fallback={
+			<div class="w-full space-y-6">
+				<MatchCard firstRun={firstRun() && !manual()} onManual={() => setManual(true)}/>
+				<Show when={!firstRun() || manual()}>
+					<ManualMatching/>
+				</Show>
+			</div>
+		}>
+			<Show when={!session.active()} fallback={
+				<Card>
+					<CardHeader>
+						<CardTitle>Matching paused</CardTitle>
+						<CardDescription>A therapy session is in progress. End it to continue matching.</CardDescription>
+					</CardHeader>
+				</Card>
+			}>
+				<MatchingWizard onOpenTherapy={props.onOpenTherapy}/>
+			</Show>
+		</Show>
+	);
+}
+
+function MatchCard(props: {firstRun: boolean; onManual: () => void}) {
+	const last = () => store.matches()[0];
+	const loudness = () => sensationLevel(last());
+
+	return (
+		<Card>
+			<Show when={last()} fallback={
+				<CardHeader>
+					<CardTitle>Find your frequency</CardTitle>
+					<CardDescription>
+						A guided test: you compare pairs of sounds with your tinnitus, check the octave and fine-tune
+						the result. It takes about 10 minutes; you need headphones and a quiet room.
+					</CardDescription>
+				</CardHeader>
+			}>
+				<CardHeader>
+					<CardTitle>Your match: {formatFrequency(last().frequency)}</CardTitle>
+					<CardDescription class="space-y-1">
+						<p>
+							{last().type === 'tonal' ? 'Tonal' : 'Hissing'} tinnitus · matched {dateFormat.format(new Date(last().date))}
+						</p>
+						<Show when={!last().reliable}>
+							<p>The comparison rounds disagreed, so this match may be inaccurate.</p>
+						</Show>
+						<Show when={loudness() !== null}>
+							<p>Loudness: {loudness()} dB above your hearing threshold.</p>
+						</Show>
+						<Show when={store.frequency() !== last().frequency}>
+							<p>Therapy currently uses {formatFrequency(store.frequency())}, set manually.</p>
+						</Show>
+					</CardDescription>
+				</CardHeader>
+			</Show>
+			<CardFooter class="flex-col gap-2">
+				<Button class="w-full" disabled={session.active()} onClick={matching.start}>
+					{last() ? 'Match again' : 'Start matching'}
+				</Button>
+				<Show when={session.active()}>
+					<p class="text-xs text-muted-foreground">A therapy session is in progress. End it to start matching.</p>
+				</Show>
+				<Show when={props.firstRun}>
+					<Button variant="ghost" class="w-full" onClick={() => props.onManual()}>I know my frequency</Button>
+				</Show>
+			</CardFooter>
+		</Card>
+	);
+}
+
+/** Manual frequency matching with a pure tone. */
+function ManualMatching() {
 	const {frequency, setFrequency} = store;
 	const playing = () => store.playState() === 'sound';
 
@@ -32,7 +116,7 @@ export function SetupPage() {
 
 			<Card>
 				<CardHeader>
-					<CardTitle>Find your frequency</CardTitle>
+					<CardTitle>Set the frequency manually</CardTitle>
 					<CardDescription>
 						Play the tone and move it until it matches the pitch of your tinnitus.
 						Check one octave up and down too: octave mistakes are very common.
