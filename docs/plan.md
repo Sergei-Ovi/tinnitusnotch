@@ -17,7 +17,8 @@ for relief, with no medical claims.
   buffer), because a biquad cascade cannot reach ≥40 dB across a full octave without eating the
   neighbouring frequencies.
 - One frequency for both ears; mono playback. Per-ear therapy is not planned.
-- Desktop only for now; UI in English.
+- Desktop only for now. UI in English and Russian: typed dictionaries in `src/i18n` (a missing Russian
+  string is a type error), language from the browser, switchable and remembered.
 - Hard volume ceiling in code; therapy level hint: at or below tinnitus loudness, tinnitus stays audible.
 - Data in localStorage with JSON export/import. Import merges sessions by id; settings are restored
   only into an empty history (new device).
@@ -106,13 +107,8 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
    session ends; another tab gets "already running in another tab" and leaves the draft alone.
    Session and match history sync between tabs. — PR #6.
 4. ✅ Catch trials in the hearing check. — PR #7.
-5. Then the deferred list.
 
 ## Open issues
 
 - Without the hearing check, matching sounds are equalised for normal hearing; with high-frequency
   hearing loss the user may still need the level slider to hear the upper candidates.
-
-## Deferred
-
-User music files, PWA / mobile background playback, i18n.

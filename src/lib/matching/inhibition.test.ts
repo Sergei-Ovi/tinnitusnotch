@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {alternativeFrequencies, describeInhibition, hasEffect, inhibitionLevel, inhibitionTrial, MAX_TIMED_SECONDS} from './inhibition';
+import {alternativeFrequencies, hasEffect, inhibitionLevel, inhibitionTrial, MAX_TIMED_SECONDS} from './inhibition';
 
 describe('residual inhibition', () => {
 	it('plays above the loudness match, or above the comparisons without one, never past the ceiling', () => {
@@ -19,16 +19,5 @@ describe('residual inhibition', () => {
 	it('offers half an octave either way, inside the playable range', () => {
 		expect(alternativeFrequencies(4000)).toEqual([2828, 5657]);
 		expect(alternativeFrequencies(15000)).toEqual([10607]);
-	});
-});
-
-describe('describing a check', () => {
-	it('names the effect and how long it lasted', () => {
-		const describe = (effect: Parameters<typeof inhibitionTrial>[1], seconds?: number) =>
-			describeInhibition(inhibitionTrial(4000, effect, seconds ?? null));
-		expect(describe('quieter', 40)).toBe('quieter for 40 s');
-		expect(describe('gone', 125)).toBe('gone for 2:05');
-		expect(describe('gone', 900)).toBe('gone for 5:00 or more');
-		expect(describe('none')).toBe('no change');
 	});
 });
