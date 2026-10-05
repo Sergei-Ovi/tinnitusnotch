@@ -1,9 +1,15 @@
-import {loopLength, type NoiseColor} from './noise-spectrum';
+import {loopLength, synthesizeBandNoise, type NoiseColor} from './noise-spectrum';
 import type {NoiseRequest, NoiseResponse} from './noise.worker';
 import NoiseWorker from './noise.worker?worker';
 import {MAX_NOISE_RMS, MAX_SINE_AMPLITUDE, volumeToGain} from './scale';
 
 export type PlayState = 'idle' | 'sound' | 'noise';
+
+/**
+ * A matching stimulus: a pure tone, or narrowband noise for hissing tinnitus.
+ * Played outside the therapy volume, at `levelDb` relative to the output ceiling (never above it).
+ */
+export type Probe = {kind: 'tone' | 'noise'; frequency: number; levelDb: number; bandwidth: number};
 
 export type AudioSettings = {
 	/** 0–100 slider value, see {@link volumeToGain}. */
@@ -21,6 +27,13 @@ const FADE_IN = 0.3;
 const FADE_OUT = 0.15;
 /** Crossfade between noise buffers when the notch or colour changes. */
 const CROSSFADE = 0.4;
+/** Narrowband noise loops are short: probes last seconds, and short buffers synthesise instantly. */
+const PROBE_NOISE_LENGTH = 2 ** 16;
+/** Fade of each probe in a sequence: short, so a one-second sound keeps its pitch, but without clicks. */
+const PROBE_RAMP = 0.03;
+/** Delay before a sequence starts, so it isn't cut by the context resuming. */
+const SEQUENCE_LEAD = 0.1;
+const PROBE_NOISE_CACHE = 16;
 
 type Voice = {source: AudioScheduledSourceNode; envelope: GainNode};
 
@@ -34,6 +47,15 @@ export class AudioGenerator {
 	private readonly frequencyData: Float32Array<ArrayBuffer>;
 
 	private voice: Voice | null = null;
+
+	private probe: Probe | null = null;
+	private probeVoice: (Voice & {level: GainNode}) | null = null;
+	/** Bumped by every stop, so a start still waiting for the context to resume is dropped. */
+	private probeToken = 0;
+	/** Context time when the scheduled probe sequence ends. */
+	private sequenceEnd = 0;
+	private sequenceVoices: Voice[] = [];
+	private readonly probeNoise = new Map<string, AudioBuffer>();
 
 	private readonly worker = new NoiseWorker();
 	private requestId = 0;
@@ -99,11 +121,126 @@ export class AudioGenerator {
 			// Sound starts once the worker returns the first buffer.
 			this.refreshNoise();
 		} else {
-			// Suspend after the fade-out has finished, unless playback was restarted meanwhile.
-			setTimeout(() => {
-				if (this.state === 'idle') this.ctx.suspend();
-			}, FADE_OUT * 5000);
+			this.suspendWhenSilent();
 		}
+	}
+
+	/**
+	 * Plays a probe continuously until {@link stopProbe}; calling it again while playing changes the
+	 * sound in place: level and tone pitch glide, a new noise band crossfades.
+	 */
+	async playProbe(probe: Probe) {
+		this.stopSequence();
+		const token = ++this.probeToken;
+		await this.ctx.resume();
+		if (token !== this.probeToken) return;
+
+		const current = this.probe;
+		const voice = this.probeVoice;
+		this.probe = probe;
+		const now = this.ctx.currentTime;
+
+		const sameSound = current?.kind === probe.kind && (probe.kind === 'tone'
+			|| (current.frequency === probe.frequency && current.bandwidth === probe.bandwidth));
+		if (voice && sameSound) {
+			voice.level.gain.setTargetAtTime(probeGain(probe), now, SMOOTHING);
+			if (voice.source instanceof OscillatorNode) {
+				voice.source.frequency.setTargetAtTime(probe.frequency, now, SMOOTHING);
+			}
+			return;
+		}
+
+		this.fadeOut(voice, voice ? CROSSFADE / 2 : FADE_OUT);
+		const source = this.probeSource(probe);
+		this.probeVoice = this.probeVoiceAt(source, probe, now, voice ? CROSSFADE / 2 : FADE_IN);
+		source.start(now);
+	}
+
+	/**
+	 * Plays probes one after another, `duration` seconds each with `gap` seconds of silence between.
+	 * Resolves to when each one starts, in seconds from now, for highlighting what is playing.
+	 */
+	async playSequence(probes: Probe[], duration: number, gap: number) {
+		this.stopProbe();
+		const token = this.probeToken;
+		await this.ctx.resume();
+		if (token !== this.probeToken) return [];
+
+		const now = this.ctx.currentTime;
+		const starts = probes.map((probe, i) => {
+			const at = now + SEQUENCE_LEAD + i * (duration + gap);
+			const source = this.probeSource(probe);
+			const voice = this.probeVoiceAt(source, probe, at, PROBE_RAMP);
+			voice.envelope.gain.setValueAtTime(1, at + duration - PROBE_RAMP);
+			voice.envelope.gain.linearRampToValueAtTime(0, at + duration);
+			source.start(at);
+			source.stop(at + duration);
+			source.onended = () => {
+				voice.envelope.disconnect();
+				this.sequenceVoices = this.sequenceVoices.filter(v => v !== voice);
+			};
+			this.sequenceVoices.push(voice);
+			return at - now;
+		});
+		this.sequenceEnd = now + SEQUENCE_LEAD + probes.length * (duration + gap);
+		this.suspendWhenSilent((this.sequenceEnd - now) * 1000 + FADE_OUT * 5000);
+		return starts;
+	}
+
+	/** Stops the continuous probe and any sequence. */
+	stopProbe() {
+		this.probeToken++;
+		this.fadeOut(this.probeVoice, FADE_OUT);
+		this.probeVoice = null;
+		this.probe = null;
+		this.stopSequence();
+		this.suspendWhenSilent();
+	}
+
+	private stopSequence() {
+		for (const voice of this.sequenceVoices) this.fadeOut(voice, PROBE_RAMP);
+		this.sequenceVoices = [];
+		this.sequenceEnd = 0;
+	}
+
+	private probeSource(probe: Probe): AudioScheduledSourceNode {
+		if (probe.kind === 'tone') return new OscillatorNode(this.ctx, {frequency: probe.frequency});
+
+		const key = `${probe.frequency}/${probe.bandwidth}`;
+		let buffer = this.probeNoise.get(key);
+		if (!buffer) {
+			const samples = synthesizeBandNoise({
+				length: PROBE_NOISE_LENGTH,
+				sampleRate: this.ctx.sampleRate,
+				center: probe.frequency,
+				widthOctaves: probe.bandwidth,
+				rms: MAX_NOISE_RMS,
+			});
+			buffer = new AudioBuffer({length: samples.length, sampleRate: this.ctx.sampleRate});
+			buffer.copyToChannel(samples, 0);
+			// Fine-tuning visits many frequencies; keep only the recent ones.
+			if (this.probeNoise.size >= PROBE_NOISE_CACHE) this.probeNoise.clear();
+			this.probeNoise.set(key, buffer);
+		}
+		return new AudioBufferSourceNode(this.ctx, {buffer, loop: true});
+	}
+
+	/** source → level → envelope → output; disconnecting the envelope releases the whole chain. */
+	private probeVoiceAt(source: AudioScheduledSourceNode, probe: Probe, at: number, fade: number) {
+		const level = new GainNode(this.ctx, {gain: probeGain(probe)});
+		const envelope = new GainNode(this.ctx, {gain: 0});
+		envelope.gain.setValueAtTime(0, at);
+		envelope.gain.linearRampToValueAtTime(1, at + fade);
+		source.connect(level).connect(envelope).connect(this.analyzerNode);
+		return {source, envelope, level};
+	}
+
+	/** Suspends the context once nothing has played for a while, unless playback was restarted meanwhile. */
+	private suspendWhenSilent(delayMs = FADE_OUT * 5000) {
+		setTimeout(() => {
+			const silent = this.state === 'idle' && !this.probeVoice && this.ctx.currentTime >= this.sequenceEnd;
+			if (silent) this.ctx.suspend();
+		}, delayMs);
 	}
 
 	/** Output spectrum in dB per analyser bin; bin `k` is centred on `k * sampleRate / fftSize`. */
@@ -168,10 +305,12 @@ export class AudioGenerator {
 	}
 
 	private fadeOutVoice(fade: number) {
-		const voice = this.voice;
-		if (!voice) return;
+		this.fadeOut(this.voice, fade);
 		this.voice = null;
+	}
 
+	private fadeOut(voice: Voice | null, fade: number) {
+		if (!voice) return;
 		const now = this.ctx.currentTime;
 		voice.envelope.gain.cancelScheduledValues(now);
 		voice.envelope.gain.setValueAtTime(voice.envelope.gain.value, now);
@@ -179,4 +318,10 @@ export class AudioGenerator {
 		voice.source.stop(now + fade);
 		voice.source.onended = () => voice.envelope.disconnect();
 	}
+}
+
+/** Linear gain for a probe; noise buffers are already at the RMS of a full-scale sine. */
+function probeGain(probe: Probe) {
+	const gain = 10 ** (Math.min(probe.levelDb, 0) / 20);
+	return probe.kind === 'tone' ? gain * MAX_SINE_AMPLITUDE : gain;
 }

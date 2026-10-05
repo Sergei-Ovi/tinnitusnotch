@@ -55,7 +55,7 @@ export function IndexPage() {
 					<TherapyPage onOpenSetup={() => setTab('setup')}/>
 				</Match>
 				<Match when={tab() === 'setup'}>
-					<SetupPage/>
+					<SetupPage onOpenTherapy={() => setTab('therapy')}/>
 				</Match>
 				<Match when={tab() === 'history'}>
 					<HistoryPage/>

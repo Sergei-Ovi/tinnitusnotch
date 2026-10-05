@@ -2,6 +2,7 @@ import {store} from '@/app/store';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from '@/components/ui/card';
 import {formatFrequency, formatMinutes} from '@/lib/format';
+import {mergeMatches} from '@/lib/matching/wizard';
 import {createBackup, parseBackup} from '@/lib/therapy/backup';
 import {mergeSessions, type Rating, type Session, sessionStats} from '@/lib/therapy/session';
 import {createMemo, createSignal, For, Show} from 'solid-js';
@@ -17,7 +18,7 @@ export function HistoryPage() {
 	let fileInput!: HTMLInputElement;
 
 	function exportData() {
-		const backup = createBackup(store.settings(), store.sessions(), new Date());
+		const backup = createBackup(store.settings(), store.sessions(), store.matches(), new Date());
 		const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, '\t')], {type: 'application/json'}));
 		const link = document.createElement('a');
 		link.href = url;
@@ -32,15 +33,17 @@ export function HistoryPage() {
 			setMessage({text: result.error, error: true});
 			return;
 		}
-		const {sessions, settings} = result.backup;
+		const {sessions, settings, matches} = result.backup;
 		// Settings come along only on a fresh device; otherwise the current setup wins.
 		const restoreSettings = store.sessions().length === 0;
 		if (restoreSettings) store.applySettings(settings);
 		const before = store.sessions().length;
 		store.setSessions(current => mergeSessions(current, sessions));
+		store.setMatches(current => mergeMatches(current, matches));
 		const added = store.sessions().length - before;
 		setMessage({
-			text: `Imported ${sessions.length} sessions (${added} new).`
+			text: `Imported ${sessions.length} sessions (${added} new)`
+				+ (matches.length ? ` and ${matches.length} frequency matches.` : '.')
 				+ (restoreSettings ? ' Frequency and sound settings restored.' : ''),
 		});
 	}
@@ -95,7 +98,7 @@ export function HistoryPage() {
 				</CardContent>
 				<CardFooter class="flex-col items-stretch gap-3">
 					<div class="flex gap-2">
-						<Button variant="outline" class="flex-1" disabled={!store.sessions().length} onClick={exportData}>
+						<Button variant="outline" class="flex-1" disabled={!store.sessions().length && !store.matches().length} onClick={exportData}>
 							Export JSON
 						</Button>
 						<Button variant="outline" class="flex-1" onClick={() => fileInput.click()}>Import JSON</Button>

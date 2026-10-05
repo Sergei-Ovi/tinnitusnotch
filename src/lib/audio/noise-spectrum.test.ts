@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {fft} from './fft';
-import {loopLength, synthesizeNoise, type NoiseColor} from './noise-spectrum';
+import {loopLength, synthesizeBandNoise, synthesizeNoise, type NoiseColor} from './noise-spectrum';
 
 const SAMPLE_RATE = 48000;
 const N = 2 ** 15;
@@ -114,6 +114,28 @@ describe('synthesizeNoise', () => {
 	it('has no content below 20 Hz', () => {
 		const signal = noise('brown');
 		expect(bandPower(signal, 1, 19) / bandPower(signal, 20, 20000)).toBeLessThan(1e-15);
+	});
+});
+
+describe('synthesizeBandNoise', () => {
+	const band = synthesizeBandNoise({
+		length: N,
+		sampleRate: SAMPLE_RATE,
+		center: 4000,
+		widthOctaves: 1 / 3,
+		rms: 0.1,
+		random: seeded(7),
+	});
+
+	it('normalises to the target RMS', () => {
+		expect(rms(band)).toBeCloseTo(0.1, 6);
+	});
+
+	it('keeps all its power inside the band', () => {
+		// Band is 3564–4490 Hz.
+		const inside = bandPower(band, 3560, 4495);
+		expect(db(bandPower(band, 20, 3500) / inside)).toBeLessThan(-100);
+		expect(db(bandPower(band, 4550, 24000) / inside)).toBeLessThan(-100);
 	});
 });
 

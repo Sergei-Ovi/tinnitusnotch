@@ -39,11 +39,18 @@ for relief, with no medical claims.
 3. Audiometry (stage 4): 0.5, 1, 2, 3, 4, 6, 8, 10, 12 kHz, simplified Hughson-Westlake
    (down 10 dB / up 5 dB), each ear separately. Steep threshold drop edge → starting hypothesis;
    otherwise start at 4 kHz.
-4. 2AFC: "which of A/B is closer to your tinnitus?", log-scale bisection, ~8–10 trials.
-   Three runs from different starting points, result = median; spread > ½ octave → "unreliable match".
+4. 2AFC: "which of A/B is closer to your tinnitus?", log-scale bisection over 500 Hz–12 kHz,
+   8 trials per run (candidates are the centres of the two halves, 10% overlap past the split,
+   "about the same" keeps the stretch between them; A/B order random). Three runs with different
+   first splits, result = median; spread > ½ octave → "unreliable match".
 5. Octave check: f vs 2f vs f/2.
 6. Manual fine-tune slider. "I know my frequency" manual mode stays available.
-7. Loudness match: tone as loud as the tinnitus (dB over threshold) → objective diary metric.
+7. Loudness match (optional): threshold at f, then tone as loud as the tinnitus; the difference
+   (dB over threshold) is the objective diary metric.
+
+Levels are in dB re the hard output ceiling, independent of the therapy volume; the 1 kHz
+calibration tone plays at −30 dB. Matches are kept as a history (`matches` in localStorage and in the
+backup, optional there so older backups still import); the latest one sets the therapy frequency.
 8. Residual inhibition check (stage 5): 60 s narrowband noise at f, then silence; ask whether tinnitus
    got quieter and for how long. No effect → gently suggest trying ±½ octave, never block therapy.
 
@@ -51,8 +58,9 @@ for relief, with no medical claims.
 
 Tabs: Therapy / Setup / History (opens on Setup until the first session is saved).
 
-- **Setup** — manual matching now (tone, log slider, octave/semitone steps, interactive spectrum);
-  the wizard will be added here (mandatory on first run, re-runnable), manual mode stays.
+- **Setup** — the matching wizard (the only option on first run, with an "I know my frequency" way
+  out; re-runnable) and its last result, plus manual matching (tone, log slider, octave/semitone
+  steps, interactive spectrum). Wizard progress survives tab switches; a running session pauses it.
 - **Therapy** — session timer, noise colour, notch width, volume, 0–10 rating before/after.
 - **History** — stats and session list with export/import; becomes **Progress** in stage 5
   (audiogram, frequency history, rating trend).
@@ -62,8 +70,9 @@ Tabs: Therapy / Setup / History (opens on Setup until the first session is saved
 1. ✅ Core fixes: log frequency scale, single volume scale, fades without clicks, octave notch,
    noise colours, volume ceiling, disclaimer. — PR #1, merged.
 2. ✅ Therapy screen: timer, 0–10 diary, history, export/import. — PR #2, merged.
-3. ⏭ Matching wizard: calibration → type → 2AFC ×3 + octave check → loudness match.
-4. Audiometry → starting hypothesis.
+3. ✅ Matching wizard: calibration → type → 2AFC ×3 + octave check → fine-tune → loudness match.
+   — PR #3, awaiting manual listening check.
+4. ⏭ Audiometry → starting hypothesis.
 5. Residual inhibition + Progress screen.
 
 Each stage keeps its procedure logic in pure modules (`src/lib/…`) with Vitest, and is checked
@@ -76,6 +85,8 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
 - Session stats (today / 7 days) are computed on render and don't roll over at midnight while the
   History tab stays open.
 - Only one browser tab should run sessions: two open tabs share one localStorage draft.
+- Matching tones are not loudness-equalised across frequencies: with high-frequency hearing loss
+  the user may need the level slider to hear the upper candidates.
 
 ## Deferred
 

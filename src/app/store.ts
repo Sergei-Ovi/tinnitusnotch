@@ -1,6 +1,7 @@
 import {AudioGenerator, type PlayState} from '@/lib/audio';
 import type {NoiseColor} from '@/lib/audio/noise-spectrum';
 import {clamp, MAX_FREQUENCY, MIN_FREQUENCY} from '@/lib/audio/scale';
+import type {MatchResult} from '@/lib/matching/wizard';
 import {DEFAULT_SESSION_MINUTES, type Session, type TherapySettings} from '@/lib/therapy/session';
 import {makePersisted} from '@solid-primitives/storage';
 import {createEffect, createRoot, createSignal} from 'solid-js';
@@ -18,6 +19,8 @@ export const store = createRoot(() => {
 	const [noiseColor, setNoiseColor] = makePersisted(createSignal<NoiseColor>('pink'), {name: 'noise-color'});
 	const [sessionMinutes, setSessionMinutes] = makePersisted(createSignal(DEFAULT_SESSION_MINUTES), {name: 'session-minutes'});
 	const [sessions, setSessions] = makePersisted(createSignal<Session[]>([]), {name: 'sessions'});
+	/** Finished frequency matchings, newest first. */
+	const [matches, setMatches] = makePersisted(createSignal<MatchResult[]>([]), {name: 'matches'});
 
 	const [playState, setPlayState] = createSignal<PlayState>('idle');
 
@@ -54,6 +57,7 @@ export const store = createRoot(() => {
 		noiseColor, setNoiseColor,
 		sessionMinutes, setSessionMinutes,
 		sessions, setSessions,
+		matches, setMatches,
 		playState, setPlayState,
 		settings, applySettings,
 	};

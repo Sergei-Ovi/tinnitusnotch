@@ -1,0 +1,229 @@
+import {session} from '@/app/session-controller';
+import {store} from '@/app/store';
+import {track} from '@/lib/analytics';
+import type {Probe} from '@/lib/audio';
+import type {Choice} from '@/lib/matching/procedure';
+import {trialPair} from '@/lib/matching/procedure';
+import {
+	answer as answerTrial,
+	calibrated,
+	chooseOctave,
+	chooseType,
+	clampLevel,
+	confirmFrequency,
+	fineTune,
+	HISS_BANDWIDTH,
+	loudnessStartDb,
+	mergeMatches,
+	REFERENCE_DB,
+	setLoudness,
+	setThreshold,
+	skipLoudness,
+	startWizard,
+	type TinnitusType,
+	toResult,
+	type WizardState,
+} from '@/lib/matching/wizard';
+import {batch, createRoot, createSignal} from 'solid-js';
+
+export const REFERENCE_FREQUENCY = 1000;
+/** Length of each sound in a comparison, and the silence between them, in seconds. */
+const COMPARE_DURATION = 1.2;
+const COMPARE_GAP = 0.5;
+
+/**
+ * The guided frequency matching: procedure state from `lib/matching`, plus the sounds for each step.
+ * Lives outside the Setup tab, so switching tabs pauses the sound but keeps the progress.
+ */
+export const matching = createRoot(() => {
+	const [state, setState] = createSignal<WizardState | null>(null);
+	/** Probe level: the comparison level, then the threshold and loudness being adjusted. */
+	const [levelDb, setLevelDbRaw] = createSignal(REFERENCE_DB);
+	/** Which sound is playing, for highlighting: 'reference', 'a', 'b', an option frequency, 'probe'. */
+	const [playing, setPlaying] = createSignal<string | null>(null);
+
+	let continuous: {id: string; probe: Probe} | null = null;
+	let timers: ReturnType<typeof setTimeout>[] = [];
+
+	const probeKind = (type: TinnitusType | null = state()?.type ?? null) => type === 'hissing' ? 'noise' : 'tone';
+
+	function probe(frequency: number, type?: TinnitusType, level = levelDb()): Probe {
+		return {kind: probeKind(type), frequency, levelDb: level, bandwidth: HISS_BANDWIDTH};
+	}
+
+	function stopSound() {
+		for (const t of timers) clearTimeout(t);
+		timers = [];
+		continuous = null;
+		store.audio.stopProbe();
+		setPlaying(null);
+	}
+
+	/** Plays sounds one after another, highlighting each while it plays. */
+	async function playSequence(items: {id: string; probe: Probe}[]) {
+		if (session.active()) return;
+		stopSound();
+		const starts = await store.audio.playSequence(items.map(i => i.probe), COMPARE_DURATION, COMPARE_GAP);
+		starts.forEach((start, i) => {
+			timers.push(setTimeout(() => setPlaying(items[i].id), start * 1000));
+			timers.push(setTimeout(() => setPlaying(p => p === items[i].id ? null : p), (start + COMPARE_DURATION) * 1000));
+		});
+	}
+
+	function playContinuous(id: string, p: Probe) {
+		if (session.active()) return;
+		if (!continuous) stopSound();
+		continuous = {id, probe: p};
+		setPlaying(id);
+		void store.audio.playProbe(p);
+	}
+
+	function toggleContinuous(id: string, p: Probe) {
+		if (continuous?.id === id) stopSound();
+		else playContinuous(id, p);
+	}
+
+	/** Keeps a continuous sound in step with the level and frequency being adjusted. */
+	function updateContinuous(frequency?: number) {
+		if (!continuous) return;
+		playContinuous(continuous.id, {...continuous.probe, levelDb: levelDb(), frequency: frequency ?? continuous.probe.frequency});
+	}
+
+	function setLevelDb(db: number) {
+		setLevelDbRaw(clampLevel(db));
+		updateContinuous();
+	}
+
+	function playPair() {
+		const run = state()?.run;
+		if (!run) return;
+		const {a, b} = trialPair(run);
+		void playSequence([{id: 'a', probe: probe(a)}, {id: 'b', probe: probe(b)}]);
+	}
+
+	function playOptions() {
+		const s = state();
+		if (!s) return;
+		void playSequence(s.octaveOptions.map(f => ({id: String(f), probe: probe(f)})));
+	}
+
+	/** Moves to the next state; on a new step, silences the old one and starts what the new one needs. */
+	function go(next: WizardState) {
+		const previous = state();
+		const stepChanged = previous?.step !== next.step;
+		batch(() => {
+			if (stepChanged) stopSound();
+			setState(next);
+		});
+		if (!stepChanged) return;
+
+		track('wizard-step', {step: next.step});
+		switch (next.step) {
+			case 'match':
+				playPair();
+				break;
+			case 'octave':
+				playOptions();
+				break;
+			case 'loudness':
+				setLevelDbRaw(loudnessStartDb(next));
+				break;
+			case 'done':
+				save(next);
+				break;
+		}
+	}
+
+	function save(s: WizardState) {
+		const result = toResult(s, crypto.randomUUID(), new Date());
+		if (!result) return;
+		batch(() => {
+			store.setMatches(current => mergeMatches(current, [result]));
+			store.setFrequency(result.frequency);
+		});
+		track('wizard-finish', {
+			type: result.type,
+			reliable: result.reliable,
+			loudness: result.loudnessDb !== null,
+		});
+	}
+
+	function abandon() {
+		const s = state();
+		if (s && s.step !== 'done') track('wizard-abandon', {step: s.step});
+	}
+
+	window.addEventListener('pagehide', abandon);
+
+	return {
+		state,
+		levelDb,
+		setLevelDb,
+		playing,
+		stopSound,
+
+		start() {
+			if (store.playState() === 'sound') store.setPlayState('idle');
+			setLevelDbRaw(REFERENCE_DB);
+			go(startWizard());
+		},
+		/** Leaves the wizard; past the last step this just closes the summary. */
+		close() {
+			stopSound();
+			abandon();
+			setState(null);
+		},
+
+		toggleReference() {
+			toggleContinuous('reference', {kind: 'tone', frequency: REFERENCE_FREQUENCY, levelDb: REFERENCE_DB, bandwidth: 0});
+		},
+		calibrated: () => go(calibrated(state()!)),
+
+		playExample(type: TinnitusType) {
+			void playSequence([{id: type, probe: probe(4000, type, REFERENCE_DB)}]);
+		},
+		chooseType(type: TinnitusType) {
+			setLevelDbRaw(REFERENCE_DB);
+			go(chooseType(type));
+		},
+
+		playPair,
+		playOne(id: 'a' | 'b') {
+			const run = state()?.run;
+			if (run) void playSequence([{id, probe: probe(trialPair(run)[id])}]);
+		},
+		answer(choice: Choice) {
+			const s = state();
+			if (!s) return;
+			const next = answerTrial(s, choice);
+			go(next);
+			if (next.step === 'match') playPair();
+		},
+
+		playOptions,
+		playOption(frequency: number) {
+			void playSequence([{id: String(frequency), probe: probe(frequency)}]);
+		},
+		chooseOctave: (frequency: number) => go(chooseOctave(state()!, frequency)),
+
+		/** Plays the current best match continuously, for fine-tuning and the loudness match. */
+		toggleProbe() {
+			const f = state()?.frequency;
+			if (f) toggleContinuous('probe', probe(f));
+		},
+		fineTune(frequency: number) {
+			go(fineTune(state()!, frequency));
+			updateContinuous(frequency);
+		},
+		confirmFrequency: () => go(confirmFrequency(state()!)),
+		/** Starts over from the comparisons, keeping the tinnitus type. */
+		repeatMatching() {
+			const type = state()?.type;
+			if (type) go(chooseType(type));
+		},
+
+		setThreshold: () => go(setThreshold(state()!, levelDb())),
+		setLoudness: () => go(setLoudness(state()!, levelDb())),
+		skipLoudness: () => go(skipLoudness(state()!)),
+	};
+});
