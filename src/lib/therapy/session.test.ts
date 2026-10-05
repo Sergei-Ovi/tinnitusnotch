@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
+	dailyRatings,
 	finishSession,
 	listenedMs,
 	mergeSessions,
@@ -123,5 +124,21 @@ describe('session stats', () => {
 
 	it('has no rating change without rated sessions', () => {
 		expect(sessionStats([], now).meanRatingChange).toBeNull();
+	});
+});
+
+describe('daily ratings', () => {
+	it('averages each local day, oldest first, skipping days without ratings', () => {
+		const at = (day: number, hour: number) => new Date(2026, 9, day, hour).toISOString();
+		const days = dailyRatings([
+			session({id: 'c', startedAt: at(7, 20), ratingBefore: 4, ratingAfter: 3}),
+			session({id: 'b', startedAt: at(6, 9)}),
+			session({id: 'a2', startedAt: at(5, 21), ratingBefore: 5, ratingAfter: null}),
+			session({id: 'a1', startedAt: at(5, 8), ratingBefore: 6, ratingAfter: 4}),
+		]);
+		expect(days).toEqual([
+			{day: new Date(2026, 9, 5).getTime(), before: 5.5, after: 4, sessions: 2},
+			{day: new Date(2026, 9, 7).getTime(), before: 4, after: 3, sessions: 1},
+		]);
 	});
 });

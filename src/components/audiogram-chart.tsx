@@ -89,6 +89,10 @@ export function AudiogramChart(props: {audiogram: Audiogram; marker?: number}) {
 				<Show when={props.marker}>{marker =>
 					<span><span class="text-primary">┆</span> your match, {formatFrequency(marker())}</span>
 				}</Show>
+				<span class="basis-full">
+					Quietest level heard at each pitch, relative to the calibration tone; higher on the chart is
+					better hearing. Not a clinical audiogram: the headphones aren't calibrated.
+				</span>
 			</figcaption>
 		</figure>
 	);

@@ -3,15 +3,27 @@ import {store} from '@/app/store';
 import {track} from '@/lib/analytics';
 import type {Probe} from '@/lib/audio';
 import {currentPresentation, equalizingOffset} from '@/lib/matching/audiometry';
+import {
+	hasEffect,
+	INHIBITION_BANDWIDTH,
+	INHIBITION_SECONDS,
+	type InhibitionEffect,
+	inhibitionLevel,
+	inhibitionTrial,
+	MAX_TIMED_SECONDS,
+} from '@/lib/matching/inhibition';
 import {clampLevel, REFERENCE_DB} from '@/lib/matching/levels';
 import type {Choice} from '@/lib/matching/procedure';
 import {trialPair} from '@/lib/matching/procedure';
 import {
+	addInhibitionTrial,
+	adoptFrequency,
 	answer as answerTrial,
 	calibrated,
 	chooseOctave,
 	chooseType,
 	confirmFrequency,
+	finishInhibition,
 	fineTune,
 	hearingResponse,
 	HISS_BANDWIDTH,
@@ -28,7 +40,7 @@ import {
 	type WizardState,
 	type WizardStep,
 } from '@/lib/matching/wizard';
-import {batch, createRoot, createSignal} from 'solid-js';
+import {batch, createEffect, createRoot, createSignal, onCleanup} from 'solid-js';
 
 export const REFERENCE_FREQUENCY = 1000;
 /** Length of each sound in a comparison, and the silence between them, in seconds. */
@@ -42,6 +54,12 @@ const BEEP_GAP = 0.2;
 const EQUALIZED_STEPS: WizardStep[] = ['match', 'octave', 'fine-tune'];
 
 /**
+ * Residual inhibition check: `intro` → noise `playing` → `ask` whether tinnitus got quieter →
+ * `timing` how long until it's back (only after an effect) → `result`.
+ */
+export type InhibitionPhase = 'intro' | 'playing' | 'ask' | 'timing' | 'result';
+
+/**
  * The guided frequency matching: procedure state from `lib/matching`, plus the sounds for each step.
  * Lives outside the Setup tab, so switching tabs pauses the sound but keeps the progress.
  */
@@ -51,6 +69,15 @@ export const matching = createRoot(() => {
 	const [levelDb, setLevelDbRaw] = createSignal(REFERENCE_DB);
 	/** Which sound is playing, for highlighting: 'reference', 'beep', 'a', 'b', an option frequency, 'probe'. */
 	const [playing, setPlaying] = createSignal<string | null>(null);
+
+	const [inhibitionPhase, setInhibitionPhase] = createSignal<InhibitionPhase>('intro');
+	/** Frequency of the inhibition check in progress: the match, or an alternative. */
+	const [testFrequency, setTestFrequency] = createSignal<number | null>(null);
+	/** When the current inhibition phase started, and a clock for its countdown or stopwatch. */
+	const [phaseStartedAt, setPhaseStartedAt] = createSignal(0);
+	const [now, setNow] = createSignal(Date.now());
+	/** Effect being timed: gone or quieter. */
+	let timedEffect: InhibitionEffect = 'quieter';
 
 	let continuous: {id: string; probe: Probe} | null = null;
 	let timers: ReturnType<typeof setTimeout>[] = [];
@@ -70,6 +97,8 @@ export const matching = createRoot(() => {
 		continuous = null;
 		store.audio.stopProbe();
 		setPlaying(null);
+		// Noise cut short (tab switched, session started): the minute has to start over.
+		if (inhibitionPhase() === 'playing') setInhibitionPhase('intro');
 	}
 
 	/** Plays sounds one after another, highlighting each while it plays. */
@@ -101,7 +130,8 @@ export const matching = createRoot(() => {
 	/** Keeps a continuous sound in step with the level and frequency being adjusted. */
 	function updateContinuous(frequency?: number) {
 		if (!continuous) return;
-		playContinuous(continuous.id, probe(frequency ?? continuous.probe.frequency));
+		const f = frequency ?? continuous.probe.frequency;
+		playContinuous(continuous.id, {...continuous.probe, frequency: f, levelDb: probe(f).levelDb});
 	}
 
 	function setLevelDb(db: number) {
@@ -115,6 +145,60 @@ export const matching = createRoot(() => {
 		const {ear, frequency, levelDb} = currentPresentation(audiometry);
 		const beep: Probe = {kind: 'tone', frequency, levelDb, bandwidth: 0, ear};
 		void playSequence(Array.from({length: BEEPS}, () => ({id: 'beep', probe: beep})), BEEP_DURATION, BEEP_GAP);
+	}
+
+	function setPhase(phase: InhibitionPhase) {
+		batch(() => {
+			setInhibitionPhase(phase);
+			setPhaseStartedAt(Date.now());
+			setNow(Date.now());
+		});
+	}
+
+	const elapsedSeconds = () => Math.max(0, (now() - phaseStartedAt()) / 1000);
+
+	/** The countdown and stopwatch tick only while they are on screen. */
+	createEffect(() => {
+		const phase = inhibitionPhase();
+		if (phase !== 'playing' && phase !== 'timing') return;
+		const interval = setInterval(() => {
+			setNow(Date.now());
+			if (phase === 'timing' && elapsedSeconds() >= MAX_TIMED_SECONDS) inhibitionBack();
+		}, 250);
+		onCleanup(() => clearInterval(interval));
+	});
+
+	/** A minute of narrowband noise at `frequency`, then silence. */
+	function startInhibition(frequency: number) {
+		const s = state();
+		if (s?.step !== 'inhibition' || session.active()) return;
+		setTestFrequency(frequency);
+		// The level is set once; later checks keep whatever the user adjusted it to.
+		if (!s.inhibition.length) setLevelDbRaw(inhibitionLevel(s.loudnessDb, levelDb()));
+		playContinuous('masker', {kind: 'noise', frequency, levelDb: levelDb(), bandwidth: INHIBITION_BANDWIDTH});
+		setPhase('playing');
+		timers.push(setTimeout(() => {
+			setPhase('ask');
+			stopSound();
+		}, INHIBITION_SECONDS * 1000));
+	}
+
+	function recordInhibition(effect: InhibitionEffect, seconds: number | null = null) {
+		const f = testFrequency();
+		if (f === null) return;
+		go(addInhibitionTrial(state()!, inhibitionTrial(f, effect, seconds)));
+		setPhase('result');
+	}
+
+	function inhibitionEffect(effect: InhibitionEffect) {
+		if (!hasEffect({effect})) return recordInhibition(effect);
+		// The after-effect began when the noise stopped, so the stopwatch keeps that start.
+		timedEffect = effect;
+		setInhibitionPhase('timing');
+	}
+
+	function inhibitionBack() {
+		if (inhibitionPhase() === 'timing') recordInhibition(timedEffect, elapsedSeconds());
 	}
 
 	function playPair() {
@@ -150,6 +234,10 @@ export const matching = createRoot(() => {
 				break;
 			case 'loudness':
 				setLevelDbRaw(loudnessStartDb(next));
+				break;
+			case 'inhibition':
+				setInhibitionPhase('intro');
+				setTestFrequency(next.frequency);
 				break;
 			case 'done':
 				save(next);
@@ -262,5 +350,16 @@ export const matching = createRoot(() => {
 		setThreshold: () => go(setThreshold(state()!, levelDb())),
 		setLoudness: () => go(setLoudness(state()!, levelDb())),
 		skipLoudness: () => go(skipLoudness(state()!)),
+
+		inhibitionPhase,
+		testFrequency,
+		elapsedSeconds,
+		startInhibition,
+		/** Stops the noise early; the check starts over. */
+		stopInhibition: stopSound,
+		inhibitionEffect,
+		inhibitionBack,
+		adoptFrequency: (frequency: number) => go(adoptFrequency(state()!, frequency)),
+		finishInhibition: () => go(finishInhibition(state()!)),
 	};
 });

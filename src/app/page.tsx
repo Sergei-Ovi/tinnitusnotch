@@ -1,5 +1,5 @@
-import {HistoryPage} from '@/app/history-page';
 import {session} from '@/app/session-controller';
+import {ProgressPage} from '@/app/progress-page';
 import {SetupPage} from '@/app/setup-page';
 import {store} from '@/app/store';
 import {TherapyPage} from '@/app/therapy-page';
@@ -7,12 +7,12 @@ import {Card, CardContent} from '@/components/ui/card';
 import {cn} from '@/lib/utils';
 import {createSignal, For, Match, Switch} from 'solid-js';
 
-type Tab = 'therapy' | 'setup' | 'history';
+type Tab = 'therapy' | 'setup' | 'progress';
 
 const TABS: {id: Tab; label: string}[] = [
 	{id: 'therapy', label: 'Therapy'},
 	{id: 'setup', label: 'Setup'},
-	{id: 'history', label: 'History'},
+	{id: 'progress', label: 'Progress'},
 ];
 
 export function IndexPage() {
@@ -57,8 +57,8 @@ export function IndexPage() {
 				<Match when={tab() === 'setup'}>
 					<SetupPage onOpenTherapy={() => setTab('therapy')}/>
 				</Match>
-				<Match when={tab() === 'history'}>
-					<HistoryPage/>
+				<Match when={tab() === 'progress'}>
+					<ProgressPage/>
 				</Match>
 			</Switch>
 		</div>
