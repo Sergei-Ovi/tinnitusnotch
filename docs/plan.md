@@ -71,7 +71,7 @@ Tabs: Therapy / Setup / History (opens on Setup until the first session is saved
    noise colours, volume ceiling, disclaimer. — PR #1, merged.
 2. ✅ Therapy screen: timer, 0–10 diary, history, export/import. — PR #2, merged.
 3. ✅ Matching wizard: calibration → type → 2AFC ×3 + octave check → fine-tune → loudness match.
-   — PR #3, awaiting manual listening check.
+   — PR #3, merged.
 4. ⏭ Audiometry → starting hypothesis.
 5. Residual inhibition + Progress screen.
 
