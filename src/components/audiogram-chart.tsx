@@ -1,5 +1,5 @@
 import {formatFrequency} from '@/lib/format';
-import {type Audiogram, type Ear, EARS} from '@/lib/matching/audiometry';
+import {type Audiogram, audiogramReliable, type Ear, EARS} from '@/lib/matching/audiometry';
 import {MAX_LEVEL_DB, MIN_LEVEL_DB, REFERENCE_DB} from '@/lib/matching/levels';
 import {cn} from '@/lib/utils';
 import {For, Show} from 'solid-js';
@@ -88,6 +88,12 @@ export function AudiogramChart(props: {audiogram: Audiogram; marker?: number}) {
 				</Show>
 				<Show when={props.marker}>{marker =>
 					<span><span class="text-primary">┆</span> your match, {formatFrequency(marker())}</span>
+				}</Show>
+				<Show when={!audiogramReliable(props.audiogram) && props.audiogram.catchTrials}>{c =>
+					<span class="basis-full text-amber-700 dark:text-amber-400">
+						Less reliable: you answered yes to {c().falseAlarms} of {c().presented} silent checks, so
+						tinnitus may have been taken for beeps and some levels may be too low.
+					</span>
 				}</Show>
 				<span class="basis-full">
 					Quietest level heard at each pitch, relative to the calibration tone; higher on the chart is

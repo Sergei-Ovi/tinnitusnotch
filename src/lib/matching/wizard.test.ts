@@ -33,7 +33,7 @@ const typeChosen = (type: 'tonal' | 'hissing') => chooseType(startWizard(), type
 function hearAll(state: WizardState, threshold: (frequency: number) => number) {
 	while (state.step === 'hearing' && state.audiometry) {
 		const {frequency, levelDb} = currentPresentation(state.audiometry);
-		state = hearingResponse(state, levelDb >= threshold(frequency));
+		state = hearingResponse(state, levelDb >= threshold(frequency), random);
 	}
 	return state;
 }
@@ -139,6 +139,21 @@ describe('matching wizard', () => {
 		expect(toResult(state, 'id', new Date())?.audiogram).toEqual(state.audiogram);
 	});
 
+	it('keeps an unreliable hearing test, but not its edge', () => {
+		let state = startHearing(calibrated(startWizard()));
+		let silent = 0;
+		// Every other presentation is silent, and the listener says "yes" to it: tinnitus taken for beeps.
+		while (state.step === 'hearing' && state.audiometry) {
+			const {frequency, levelDb} = currentPresentation(state.audiometry);
+			if (levelDb === -Infinity) silent++;
+			state = hearingResponse(state, levelDb === -Infinity || levelDb >= (frequency <= 4000 ? -70 : -35), () => 0);
+		}
+		expect(silent).toBeGreaterThan(1);
+		expect(state.audiogram?.catchTrials).toEqual({presented: silent, falseAlarms: silent});
+		expect(state.audiogram?.right[4]).toBe(-70);
+		expect(state.hypothesis).toBeNull();
+	});
+
 	it('keeps the hearing test when the comparisons are repeated', () => {
 		let state = hearAll(startHearing(calibrated(startWizard())), () => -60);
 		expect(state.hypothesis).toBeNull();
@@ -150,7 +165,7 @@ describe('matching wizard', () => {
 
 	it('drops a partial hearing test when it is skipped', () => {
 		let state = startHearing(calibrated(startWizard()));
-		state = hearingResponse(state, true);
+		state = hearingResponse(state, true, random);
 		state = skipHearing(state);
 		expect(state).toMatchObject({step: 'type', audiometry: null, audiogram: null, hypothesis: null});
 	});
