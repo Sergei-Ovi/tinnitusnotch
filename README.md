@@ -1,5 +1,8 @@
 [![Deploy static content to Pages](https://github.com/vladplskv/tinnitusnotch/actions/workflows/main.yml/badge.svg)](https://github.com/vladplskv/tinnitusnotch/actions/workflows/main.yml)
 
+Notched sound therapy for tinnitus: noise with an octave-wide band removed around your tinnitus frequency.
+Not a medical treatment. Development plan: [docs/plan.md](docs/plan.md).
+
 ## Usage
 
 Those templates dependencies are maintained via [pnpm](https://pnpm.io) via `pnpm up -Lri`.
@@ -30,6 +33,10 @@ It correctly bundles Solid in production mode and optimizes the build for the be
 
 The build is minified and the filenames include the hashes.<br>
 Your app is ready to be deployed!
+
+### `npm test`
+
+Runs the unit tests (Vitest) for the audio logic in `src/lib/audio`.
 
 ## Deployment
 
