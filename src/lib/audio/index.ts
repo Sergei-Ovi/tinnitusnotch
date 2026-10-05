@@ -9,7 +9,14 @@ export type PlayState = 'idle' | 'sound' | 'noise';
  * A matching stimulus: a pure tone, or narrowband noise for hissing tinnitus.
  * Played outside the therapy volume, at `levelDb` relative to the output ceiling (never above it).
  */
-export type Probe = {kind: 'tone' | 'noise'; frequency: number; levelDb: number; bandwidth: number};
+export type Probe = {
+	kind: 'tone' | 'noise';
+	frequency: number;
+	levelDb: number;
+	bandwidth: number;
+	/** Plays in one ear only, for the hearing test; both ears if absent. */
+	ear?: 'left' | 'right';
+};
 
 export type AudioSettings = {
 	/** 0–100 slider value, see {@link volumeToGain}. */
@@ -52,6 +59,8 @@ export class AudioGenerator {
 	private probeVoice: (Voice & {level: GainNode}) | null = null;
 	/** Bumped by every stop, so a start still waiting for the context to resume is dropped. */
 	private probeToken = 0;
+	/** Starts waiting for the context to resume; it must not be suspended under them. */
+	private resuming = 0;
 	/** Context time when the scheduled probe sequence ends. */
 	private sequenceEnd = 0;
 	private sequenceVoices: Voice[] = [];
@@ -113,11 +122,11 @@ export class AudioGenerator {
 		this.fadeOutVoice(FADE_OUT);
 
 		if (state === 'sound') {
-			await this.ctx.resume();
+			await this.resume();
 			const oscillator = new OscillatorNode(this.ctx, {frequency: this.settings.frequency});
 			this.startVoice(oscillator, MAX_SINE_AMPLITUDE, FADE_IN);
 		} else if (state === 'noise') {
-			await this.ctx.resume();
+			await this.resume();
 			// Sound starts once the worker returns the first buffer.
 			this.refreshNoise();
 		} else {
@@ -132,7 +141,7 @@ export class AudioGenerator {
 	async playProbe(probe: Probe) {
 		this.stopSequence();
 		const token = ++this.probeToken;
-		await this.ctx.resume();
+		await this.resume();
 		if (token !== this.probeToken) return;
 
 		const current = this.probe;
@@ -163,7 +172,7 @@ export class AudioGenerator {
 	async playSequence(probes: Probe[], duration: number, gap: number) {
 		this.stopProbe();
 		const token = this.probeToken;
-		await this.ctx.resume();
+		await this.resume();
 		if (token !== this.probeToken) return [];
 
 		const now = this.ctx.currentTime;
@@ -225,20 +234,38 @@ export class AudioGenerator {
 		return new AudioBufferSourceNode(this.ctx, {buffer, loop: true});
 	}
 
-	/** source → level → envelope → output; disconnecting the envelope releases the whole chain. */
+	/** source → level → envelope (→ panner) → output; disconnecting the envelope releases the chain. */
 	private probeVoiceAt(source: AudioScheduledSourceNode, probe: Probe, at: number, fade: number) {
 		const level = new GainNode(this.ctx, {gain: probeGain(probe)});
 		const envelope = new GainNode(this.ctx, {gain: 0});
 		envelope.gain.setValueAtTime(0, at);
 		envelope.gain.linearRampToValueAtTime(1, at + fade);
-		source.connect(level).connect(envelope).connect(this.analyzerNode);
+		source.connect(level).connect(envelope);
+		if (probe.ear) {
+			// Fully panned, the equal-power law leaves the other channel silent.
+			const panner = new StereoPannerNode(this.ctx, {pan: probe.ear === 'left' ? -1 : 1});
+			envelope.connect(panner).connect(this.analyzerNode);
+			source.addEventListener('ended', () => panner.disconnect());
+		} else {
+			envelope.connect(this.analyzerNode);
+		}
 		return {source, envelope, level};
+	}
+
+	private async resume() {
+		this.resuming++;
+		try {
+			await this.ctx.resume();
+		} finally {
+			this.resuming--;
+		}
 	}
 
 	/** Suspends the context once nothing has played for a while, unless playback was restarted meanwhile. */
 	private suspendWhenSilent(delayMs = FADE_OUT * 5000) {
 		setTimeout(() => {
-			const silent = this.state === 'idle' && !this.probeVoice && this.ctx.currentTime >= this.sequenceEnd;
+			const silent = this.state === 'idle' && !this.probeVoice && !this.resuming
+				&& this.ctx.currentTime >= this.sequenceEnd;
 			if (silent) this.ctx.suspend();
 		}, delayMs);
 	}

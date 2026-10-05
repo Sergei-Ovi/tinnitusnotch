@@ -1,4 +1,5 @@
 import {NOISE_COLORS} from '@/lib/audio/noise-spectrum';
+import type {Audiogram} from '@/lib/matching/audiometry';
 import {type MatchResult, TINNITUS_TYPES} from '@/lib/matching/wizard';
 import type {Rating, Session, TherapySettings} from './session';
 
@@ -112,5 +113,13 @@ function isMatch(value: unknown): value is MatchResult {
 		&& isNumber(value.spreadOctaves) && value.spreadOctaves >= 0
 		&& typeof value.reliable === 'boolean'
 		&& isLevel(value.thresholdDb)
-		&& isLevel(value.loudnessDb);
+		&& isLevel(value.loudnessDb)
+		&& (value.audiogram === undefined || value.audiogram === null || isAudiogram(value.audiogram));
+}
+
+function isAudiogram(value: unknown): value is Audiogram {
+	if (!isRecord(value) || !Array.isArray(value.frequencies) || !value.frequencies.length) return false;
+	const {frequencies, left, right} = value;
+	return frequencies.every((f, i) => isNumber(f) && f > 0 && (i === 0 || f > frequencies[i - 1]))
+		&& [left, right].every(t => Array.isArray(t) && t.length === frequencies.length && t.every(isLevel));
 }

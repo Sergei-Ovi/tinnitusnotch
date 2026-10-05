@@ -36,9 +36,15 @@ for relief, with no medical claims.
    clear. All levels are relative to it.
 2. Tinnitus type: tonal or hissing. Hissing → match with narrowband noise and warn that notch therapy
    is expected to be less effective.
-3. Audiometry (stage 4): 0.5, 1, 2, 3, 4, 6, 8, 10, 12 kHz, simplified Hughson-Westlake
-   (down 10 dB / up 5 dB), each ear separately. Steep threshold drop edge → starting hypothesis;
-   otherwise start at 4 kHz.
+3. Hearing check (optional, right after calibration): 0.5, 1, 2, 3, 4, 6, 8, 10, 12 kHz, each ear
+   separately, three pulsed beeps per presentation with a yes/no answer. Simplified Hughson-Westlake:
+   down 10 dB / up 5 dB (up 10 until the first response), threshold = two responses at one level on
+   the way up, at most 14 presentations per frequency; each frequency starts 15 dB above the previous
+   threshold. Thresholds are corrected by a rough normal-hearing curve; the largest rise ≥15 dB between
+   neighbouring frequencies (either ear) is the edge, and its geometric middle the starting hypothesis.
+   The hypothesis sets the first split of each run (on it, then ∓0.15 of the range); without one the
+   default splits stay. The audiogram also equalises the sounds being compared (match, octave,
+   fine-tune) to the same level above threshold as 1 kHz, better ear, within −15…+30 dB.
 4. 2AFC: "which of A/B is closer to your tinnitus?", log-scale bisection over 500 Hz–12 kHz,
    8 trials per run (candidates are the centres of the two halves, 10% overlap past the split,
    "about the same" keeps the stretch between them; A/B order random). Three runs with different
@@ -51,6 +57,7 @@ for relief, with no medical claims.
 Levels are in dB re the hard output ceiling, independent of the therapy volume; the 1 kHz
 calibration tone plays at −30 dB. Matches are kept as a history (`matches` in localStorage and in the
 backup, optional there so older backups still import); the latest one sets the therapy frequency.
+The audiogram is kept with its match (optional field, absent in older matches).
 8. Residual inhibition check (stage 5): 60 s narrowband noise at f, then silence; ask whether tinnitus
    got quieter and for how long. No effect → gently suggest trying ±½ octave, never block therapy.
 
@@ -72,8 +79,8 @@ Tabs: Therapy / Setup / History (opens on Setup until the first session is saved
 2. ✅ Therapy screen: timer, 0–10 diary, history, export/import. — PR #2, merged.
 3. ✅ Matching wizard: calibration → type → 2AFC ×3 + octave check → fine-tune → loudness match.
    — PR #3, merged.
-4. ⏭ Audiometry → starting hypothesis.
-5. Residual inhibition + Progress screen.
+4. ✅ Hearing check → starting hypothesis, level equalisation, audiogram on the result. — PR #4.
+5. ⏭ Residual inhibition + Progress screen.
 
 Each stage keeps its procedure logic in pure modules (`src/lib/…`) with Vitest, and is checked
 end-to-end in a headless browser before the PR; sound itself is checked by ear.
@@ -85,8 +92,11 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
 - Session stats (today / 7 days) are computed on render and don't roll over at midnight while the
   History tab stays open.
 - Only one browser tab should run sessions: two open tabs share one localStorage draft.
-- Matching tones are not loudness-equalised across frequencies: with high-frequency hearing loss
-  the user may need the level slider to hear the upper candidates.
+- Matching tones are loudness-equalised only when the hearing check was done; after skipping it,
+  with high-frequency hearing loss the user may need the level slider to hear the upper candidates.
+- The hearing check is a yes/no task without catch trials, so a listener who says "yes" to their own
+  tinnitus gets thresholds that are too low. Pulsed beeps and the hint to listen for the rhythm are
+  the only guard.
 
 ## Deferred
 

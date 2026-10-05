@@ -1,23 +1,20 @@
 import {matching} from '@/app/matching-controller';
+import {AudiogramChart} from '@/components/audiogram-chart';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from '@/components/ui/card';
 import {Slider, SliderFill, SliderLabel, SliderThumb, SliderTrack, SliderValueLabel} from '@/components/ui/slider';
 import {shiftOctaves} from '@/lib/audio/scale';
 import {formatFrequency} from '@/lib/format';
+import {currentPresentation, PRESENTATION_COUNT} from '@/lib/matching/audiometry';
+import {MAX_LEVEL_DB, MIN_LEVEL_DB, REFERENCE_DB} from '@/lib/matching/levels';
 import {RUNS, TRIALS_PER_RUN} from '@/lib/matching/procedure';
-import {
-	MAX_LEVEL_DB,
-	MIN_LEVEL_DB,
-	REFERENCE_DB,
-	sensationLevel,
-	type WizardState,
-	type WizardStep,
-} from '@/lib/matching/wizard';
+import {sensationLevel, type WizardState, type WizardStep} from '@/lib/matching/wizard';
 import {cn} from '@/lib/utils';
 import {For, type JSX, Match, onCleanup, Show, Switch} from 'solid-js';
 
 const STEPS: {steps: WizardStep[]; label: string}[] = [
 	{steps: ['calibrate'], label: 'Calibrate'},
+	{steps: ['hearing'], label: 'Hearing'},
 	{steps: ['type'], label: 'Sound type'},
 	{steps: ['match'], label: 'Compare'},
 	{steps: ['octave'], label: 'Octave'},
@@ -40,7 +37,8 @@ export function MatchingWizard(props: {onOpenTherapy: () => void}) {
 			</Show>
 			<Switch>
 				<Match when={state().step === 'calibrate'}><CalibrateStep/></Match>
-				<Match when={state().step === 'type'}><TypeStep/></Match>
+				<Match when={state().step === 'hearing'}><HearingStep state={state()}/></Match>
+				<Match when={state().step === 'type'}><TypeStep state={state()}/></Match>
 				<Match when={state().step === 'match'}><CompareStep state={state()}/></Match>
 				<Match when={state().step === 'octave'}><OctaveStep state={state()}/></Match>
 				<Match when={state().step === 'fine-tune'}><FineTuneStep state={state()}/></Match>
@@ -142,10 +140,62 @@ function CalibrateStep() {
 	);
 }
 
-function TypeStep() {
+function HearingStep(props: {state: WizardState}) {
+	return (
+		<Show when={props.state.audiometry} fallback={
+			<StepCard title="Hearing check (optional)"
+			          description={<>
+				          <p>
+					          You'll hear short beeps in one ear at a time, getting quieter, and say whether you heard
+					          them. Tinnitus is often pitched near where hearing drops off, so this gives the comparisons
+					          a head start, and lets the sounds you compare be equally easy to hear.
+				          </p>
+				          <p>It takes 5–7 minutes. It is not a medical hearing test.</p>
+			          </>}
+			          footer={<>
+				          <Button variant="outline" onClick={matching.skipHearing}>Skip</Button>
+				          <Button onClick={matching.startHearing}>Start</Button>
+			          </>}/>
+		}>{audiometry => {
+			const presentation = () => currentPresentation(audiometry());
+			return (
+				<StepCard title="Did you hear the beeps?"
+				          description={<>
+					          <p>
+						          Answer yes only if you heard the beeps, even faintly. Your tinnitus may sound similar:
+						          listen for the rhythm. Replay them if you're unsure.
+					          </p>
+				          </>}
+				          footer={<Button variant="outline" onClick={matching.skipHearing}>Skip the check</Button>}>
+					<div class="flex items-center justify-between text-sm text-muted-foreground">
+						<span>Sound {audiometry().index + 1} of {PRESENTATION_COUNT}</span>
+						<span class="font-medium text-foreground">
+							{presentation().ear === 'left' ? 'Left' : 'Right'} ear
+						</span>
+					</div>
+					<PlayButton id="beep" class="w-full" onClick={matching.playBeeps}>Play again</PlayButton>
+					<div class="grid grid-cols-2 gap-3">
+						<Button variant="secondary" onClick={() => matching.hearingResponse(false)}>No</Button>
+						<Button onClick={() => matching.hearingResponse(true)}>Yes, I heard them</Button>
+					</div>
+				</StepCard>
+			);
+		}}</Show>
+	);
+}
+
+function TypeStep(props: {state: WizardState}) {
 	return (
 		<StepCard title="What does your tinnitus sound like?"
-		          description="Listen to the examples if you are unsure. Pitch doesn't matter here, only the kind of sound."
+		          description={<>
+			          <p>Listen to the examples if you are unsure. Pitch doesn't matter here, only the kind of sound.</p>
+			          <Show when={props.state.hypothesis}>{hypothesis =>
+				          <p class="rounded-md bg-muted px-3 py-2 text-foreground">
+					          Your hearing drops off steeply around {formatFrequency(hypothesis())}; the comparisons
+					          will start from there.
+				          </p>
+			          }</Show>
+		          </>}
 		          footer={null}>
 			<div class="grid gap-3 sm:grid-cols-2">
 				<TypeOption type="tonal" title="A tone or whistle" text="One clear pitch, like a beep or ringing."/>
@@ -342,6 +392,16 @@ function DoneStep(props: {state: WizardState; onOpenTherapy: () => void}) {
 						Tinnitus loudness: {loudness()} dB above your hearing threshold at this pitch.
 					</p>
 				</Show>
+				<Show when={props.state.audiogram}>{audiogram =>
+					<div class="space-y-2 pt-2">
+						<div class="font-medium">Hearing check</div>
+						<AudiogramChart audiogram={audiogram()} marker={props.state.frequency!}/>
+						<p class="text-xs text-muted-foreground">
+							Quietest level heard at each pitch, relative to the calibration tone; higher on the chart is better hearing.
+							Not a clinical audiogram: the headphones aren't calibrated.
+						</p>
+					</div>
+				}</Show>
 			</CardContent>
 			<CardFooter class="gap-2">
 				<Button variant="outline" onClick={matching.close}>Close</Button>

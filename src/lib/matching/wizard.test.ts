@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest';
-import {RUNS, trialPair, TRIALS_PER_RUN} from './procedure';
+import {currentPresentation} from './audiometry';
+import {MIN_LEVEL_DB, REFERENCE_DB} from './levels';
+import {firstSplit, RUNS, trialPair, TRIALS_PER_RUN} from './procedure';
 import {
 	answer,
 	calibrated,
@@ -7,19 +9,30 @@ import {
 	chooseType,
 	confirmFrequency,
 	fineTune,
+	hearingResponse,
 	loudnessStartDb,
-	MIN_LEVEL_DB,
-	REFERENCE_DB,
 	sensationLevel,
 	setLoudness,
 	setThreshold,
+	skipHearing,
 	skipLoudness,
+	startHearing,
 	startWizard,
 	toResult,
 	type WizardState,
 } from './wizard';
 
 const random = () => 0.3;
+const typeChosen = (type: 'tonal' | 'hissing') => chooseType(startWizard(), type, random);
+
+/** Runs the hearing test as a listener with these thresholds (dB re ceiling) would answer. */
+function hearAll(state: WizardState, threshold: (frequency: number) => number) {
+	while (state.step === 'hearing' && state.audiometry) {
+		const {frequency, levelDb} = currentPresentation(state.audiometry);
+		state = hearingResponse(state, levelDb >= threshold(frequency));
+	}
+	return state;
+}
 
 /** Answers every comparison as a listener with tinnitus at `target` would. */
 function matchAll(state: WizardState, target: number) {
@@ -36,8 +49,10 @@ function matchAll(state: WizardState, target: number) {
 describe('matching wizard', () => {
 	it('goes from calibration through all runs to the octave check', () => {
 		let state = calibrated(startWizard());
+		expect(state.step).toBe('hearing');
+		state = skipHearing(state);
 		expect(state.step).toBe('type');
-		state = chooseType('tonal', random);
+		state = chooseType(state, 'tonal', random);
 		expect(state.step).toBe('match');
 
 		const {state: matched, trials} = matchAll(state, 6000);
@@ -50,7 +65,7 @@ describe('matching wizard', () => {
 	});
 
 	it('produces a result with the octave choice, fine-tuning and loudness', () => {
-		let state = matchAll(chooseType('hissing', random), 3000).state;
+		let state = matchAll(typeChosen('hissing'), 3000).state;
 		state = chooseOctave(state, 6000);
 		state = fineTune(state, 6200);
 		state = confirmFrequency(state);
@@ -73,7 +88,7 @@ describe('matching wizard', () => {
 	});
 
 	it('allows skipping the loudness match', () => {
-		let state = matchAll(chooseType('tonal', random), 4000).state;
+		let state = matchAll(typeChosen('tonal'), 4000).state;
 		state = confirmFrequency(chooseOctave(state, state.frequency!));
 		state = skipLoudness(setThreshold(state, -55));
 		expect(state.step).toBe('done');
@@ -83,7 +98,7 @@ describe('matching wizard', () => {
 	});
 
 	it('clamps levels to the playable range', () => {
-		let state = matchAll(chooseType('tonal', random), 4000).state;
+		let state = matchAll(typeChosen('tonal'), 4000).state;
 		state = confirmFrequency(chooseOctave(state, 4000));
 		state = setThreshold(state, -200);
 		expect(state.thresholdDb).toBe(MIN_LEVEL_DB);
@@ -92,10 +107,42 @@ describe('matching wizard', () => {
 	});
 
 	it('ignores actions out of order', () => {
-		const state = chooseType('tonal', random);
+		const state = typeChosen('tonal');
 		expect(chooseOctave(state, 4000)).toBe(state);
 		expect(setThreshold(state, -40)).toBe(state);
 		expect(toResult(state, 'id', new Date())).toBeNull();
+	});
+
+	it('takes the hearing edge as the starting hypothesis and keeps the audiogram', () => {
+		let state = startHearing(calibrated(startWizard()));
+		expect(state.audiometry).not.toBeNull();
+		// Normal hearing up to 4 kHz, a steep drop above it.
+		state = hearAll(state, f => f <= 4000 ? -70 : -35);
+		expect(state.step).toBe('type');
+		expect(state.audiogram?.right[4]).toBe(-70);
+		expect(state.hypothesis).toBe(4899);
+
+		state = chooseType(state, 'tonal', random);
+		expect(state.run?.split).toBe(firstSplit(0, 4899));
+		state = matchAll(state, 6000).state;
+		state = skipLoudness(confirmFrequency(chooseOctave(state, state.frequency!)));
+		expect(toResult(state, 'id', new Date())?.audiogram).toEqual(state.audiogram);
+	});
+
+	it('keeps the hearing test when the comparisons are repeated', () => {
+		let state = hearAll(startHearing(calibrated(startWizard())), () => -60);
+		expect(state.hypothesis).toBeNull();
+		state = chooseType(matchAll(chooseType(state, 'tonal', random), 3000).state, 'tonal', random);
+		expect(state.step).toBe('match');
+		expect(state.estimates).toEqual([]);
+		expect(state.audiogram).not.toBeNull();
+	});
+
+	it('drops a partial hearing test when it is skipped', () => {
+		let state = startHearing(calibrated(startWizard()));
+		state = hearingResponse(state, true);
+		state = skipHearing(state);
+		expect(state).toMatchObject({step: 'type', audiometry: null, audiogram: null, hypothesis: null});
 	});
 
 	it('starts the loudness slider at the reference without a threshold', () => {
