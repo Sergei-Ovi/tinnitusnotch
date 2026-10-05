@@ -157,7 +157,7 @@ function HearingStep(props: {state: WizardState}) {
 				          <p>
 					          You'll hear short beeps in one ear at a time, getting quieter, and say whether you heard
 					          them. Tinnitus is often pitched near where hearing drops off, so this gives the comparisons
-					          a head start, and lets the sounds you compare be equally easy to hear.
+					          a head start, and fits the levels of the sounds you compare to your hearing.
 				          </p>
 				          <p>It takes 5–7 minutes. It is not a medical hearing test.</p>
 			          </>}

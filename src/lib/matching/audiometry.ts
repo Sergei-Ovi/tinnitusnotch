@@ -167,6 +167,12 @@ function respondTone(state: AudiometryState, heard: boolean): AudiometryState {
 const NORMAL_SHAPE_DB: Record<number, number> = {
 	500: 4, 1000: 0, 2000: -2, 3000: -4, 4000: -3, 6000: 3, 8000: 8, 10000: 12, 12000: 16,
 };
+/** Stand-in for a hearing test that was skipped: normal hearing, thresholds relative to 1 kHz. */
+export const NORMAL_AUDIOGRAM: Audiogram = {
+	frequencies: AUDIOGRAM_FREQUENCIES,
+	left: AUDIOGRAM_FREQUENCIES.map(f => NORMAL_SHAPE_DB[f]),
+	right: AUDIOGRAM_FREQUENCIES.map(f => NORMAL_SHAPE_DB[f]),
+};
 /** Stand-in for "not heard at the loudest level": somewhere above it. */
 const NO_RESPONSE_DB = MAX_LEVEL_DB + 10;
 /** Rise in threshold between neighbouring test frequencies that counts as a steep edge of hearing loss. */

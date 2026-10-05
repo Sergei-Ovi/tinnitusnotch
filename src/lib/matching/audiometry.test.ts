@@ -4,6 +4,7 @@ import {
 	AUDIOGRAM_FREQUENCIES,
 	audiogramReliable,
 	audiometryDone,
+	NORMAL_AUDIOGRAM,
 	currentPresentation,
 	type Ear,
 	equalizingOffset,
@@ -173,6 +174,12 @@ describe('equalizing offset', () => {
 		expect(equalizingOffset(g, 8000)).toBe(20);
 		expect(equalizingOffset(g, Math.sqrt(6000 * 8000))).toBeCloseTo(10);
 		expect(equalizingOffset(g, 16000)).toBe(20);
+	});
+
+	it('follows the normal hearing curve without a hearing test', () => {
+		expect(equalizingOffset(NORMAL_AUDIOGRAM, 1000)).toBe(0);
+		expect(equalizingOffset(NORMAL_AUDIOGRAM, 3000)).toBe(-4);
+		expect(equalizingOffset(NORMAL_AUDIOGRAM, 12000)).toBe(16);
 	});
 
 	it('is limited both ways', () => {

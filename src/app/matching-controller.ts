@@ -2,7 +2,7 @@ import {session} from '@/app/session-controller';
 import {store} from '@/app/store';
 import {track} from '@/lib/analytics';
 import type {Probe} from '@/lib/audio';
-import {currentPresentation, equalizingOffset} from '@/lib/matching/audiometry';
+import {currentPresentation, equalizingOffset, NORMAL_AUDIOGRAM} from '@/lib/matching/audiometry';
 import {
 	hasEffect,
 	INHIBITION_BANDWIDTH,
@@ -84,10 +84,13 @@ export const matching = createRoot(() => {
 
 	const probeKind = (type: TinnitusType | null = state()?.type ?? null) => type === 'hissing' ? 'noise' : 'tone';
 
-	/** With a hearing test, sounds being compared are set equally far above threshold (the slider means 1 kHz). */
+	/**
+	 * Sounds being compared are set equally far above threshold (the slider means 1 kHz): by the hearing
+	 * test, or by normal hearing when it was skipped.
+	 */
 	function probe(frequency: number, type?: TinnitusType, level = levelDb()): Probe {
 		const s = state();
-		const offset = s?.audiogram && EQUALIZED_STEPS.includes(s.step) ? equalizingOffset(s.audiogram, frequency) : 0;
+		const offset = s && EQUALIZED_STEPS.includes(s.step) ? equalizingOffset(s.audiogram ?? NORMAL_AUDIOGRAM, frequency) : 0;
 		return {kind: probeKind(type), frequency, levelDb: clampLevel(level + offset), bandwidth: HISS_BANDWIDTH};
 	}
 
