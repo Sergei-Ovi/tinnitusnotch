@@ -16,6 +16,7 @@ import {
 	shiftOctaves,
 } from '@/lib/audio/scale';
 import {formatFrequency} from '@/lib/format';
+import {describeInhibition} from '@/lib/matching/inhibition';
 import {sensationLevel} from '@/lib/matching/wizard';
 import {createSignal, onCleanup, Show} from 'solid-js';
 
@@ -78,6 +79,11 @@ function MatchCard(props: {firstRun: boolean; onManual: () => void}) {
 						</Show>
 						<Show when={loudness() !== null}>
 							<p>Loudness: {loudness()} dB above your hearing threshold.</p>
+						</Show>
+						<Show when={last().inhibition?.length}>
+							<p>
+								After-effect: {last().inhibition!.map(t => `${formatFrequency(t.frequency)} ${describeInhibition(t)}`).join(', ')}.
+							</p>
 						</Show>
 						<Show when={store.frequency() !== last().frequency}>
 							<p>Therapy currently uses {formatFrequency(store.frequency())}, set manually.</p>

@@ -1,5 +1,6 @@
 import {NOISE_COLORS} from '@/lib/audio/noise-spectrum';
 import type {Audiogram} from '@/lib/matching/audiometry';
+import {INHIBITION_EFFECTS, type InhibitionTrial} from '@/lib/matching/inhibition';
 import {type MatchResult, TINNITUS_TYPES} from '@/lib/matching/wizard';
 import type {Rating, Session, TherapySettings} from './session';
 
@@ -114,7 +115,15 @@ function isMatch(value: unknown): value is MatchResult {
 		&& typeof value.reliable === 'boolean'
 		&& isLevel(value.thresholdDb)
 		&& isLevel(value.loudnessDb)
-		&& (value.audiogram === undefined || value.audiogram === null || isAudiogram(value.audiogram));
+		&& (value.audiogram === undefined || value.audiogram === null || isAudiogram(value.audiogram))
+		&& (value.inhibition === undefined || (Array.isArray(value.inhibition) && value.inhibition.every(isInhibitionTrial)));
+}
+
+function isInhibitionTrial(value: unknown): value is InhibitionTrial {
+	return isRecord(value)
+		&& isNumber(value.frequency) && value.frequency > 0
+		&& INHIBITION_EFFECTS.includes(value.effect as never)
+		&& (value.seconds === null || (isNumber(value.seconds) && value.seconds >= 0));
 }
 
 function isAudiogram(value: unknown): value is Audiogram {

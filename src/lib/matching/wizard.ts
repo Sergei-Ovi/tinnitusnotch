@@ -7,6 +7,7 @@ import {
 	respond,
 	startAudiometry,
 } from './audiometry';
+import {hasEffect, type InhibitionTrial} from './inhibition';
 import {clampLevel, REFERENCE_DB} from './levels';
 import {
 	answerTrial,
@@ -31,7 +32,8 @@ export const HISS_BANDWIDTH = 1 / 3;
 /** Where the loudness match starts, above the threshold just found. */
 const LOUDNESS_START_ABOVE_THRESHOLD = 10;
 
-export type WizardStep = 'calibrate' | 'hearing' | 'type' | 'match' | 'octave' | 'fine-tune' | 'threshold' | 'loudness' | 'done';
+export type WizardStep = 'calibrate' | 'hearing' | 'type' | 'match' | 'octave' | 'fine-tune' | 'threshold' | 'loudness' | 'inhibition'
+	| 'done';
 
 export type WizardState = {
 	step: WizardStep;
@@ -52,6 +54,8 @@ export type WizardState = {
 	frequency: number | null;
 	thresholdDb: number | null;
 	loudnessDb: number | null;
+	/** Residual inhibition checks, in the order they were made. */
+	inhibition: InhibitionTrial[];
 };
 
 /** A finished matching, kept for the history of matches. */
@@ -71,6 +75,8 @@ export type MatchResult = {
 	loudnessDb: number | null;
 	/** Hearing test made with this match; absent in matches made before the test existed. */
 	audiogram?: Audiogram | null;
+	/** Residual inhibition checks; absent in matches made before the check existed. */
+	inhibition?: InhibitionTrial[];
 };
 
 export function startWizard(): WizardState {
@@ -87,6 +93,7 @@ export function startWizard(): WizardState {
 		frequency: null,
 		thresholdDb: null,
 		loudnessDb: null,
+		inhibition: [],
 	};
 }
 
@@ -174,13 +181,31 @@ export function setThreshold(state: WizardState, levelDb: number): WizardState {
 
 export function setLoudness(state: WizardState, levelDb: number): WizardState {
 	if (state.step !== 'loudness') return state;
-	return {...state, step: 'done', loudnessDb: clampLevel(levelDb)};
+	return {...state, step: 'inhibition', loudnessDb: clampLevel(levelDb)};
 }
 
 /** The loudness match is optional; skipping it at either part drops both values. */
 export function skipLoudness(state: WizardState): WizardState {
 	if (state.step !== 'threshold' && state.step !== 'loudness') return state;
-	return {...state, step: 'done', thresholdDb: null, loudnessDb: null};
+	return {...state, step: 'inhibition', thresholdDb: null, loudnessDb: null};
+}
+
+export function addInhibitionTrial(state: WizardState, trial: InhibitionTrial): WizardState {
+	if (state.step !== 'inhibition') return state;
+	return {...state, inhibition: [...state.inhibition, trial]};
+}
+
+/** Switches to a frequency that showed an effect when the match didn't; ignored for any other. */
+export function adoptFrequency(state: WizardState, frequency: number): WizardState {
+	if (state.step !== 'inhibition') return state;
+	if (!state.inhibition.some(t => t.frequency === frequency && hasEffect(t))) return state;
+	return {...state, frequency};
+}
+
+/** Ends the optional residual inhibition step, with or without checks. */
+export function finishInhibition(state: WizardState): WizardState {
+	if (state.step !== 'inhibition') return state;
+	return {...state, step: 'done'};
 }
 
 /** Level the loudness slider starts from, once the threshold is known. */
@@ -202,6 +227,7 @@ export function toResult(state: WizardState, id: string, date: Date): MatchResul
 		thresholdDb: state.thresholdDb,
 		loudnessDb: state.loudnessDb,
 		audiogram: state.audiogram,
+		inhibition: state.inhibition,
 	};
 }
 

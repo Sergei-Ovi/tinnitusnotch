@@ -1,18 +1,29 @@
 import {store} from '@/app/store';
+import {AudiogramChart} from '@/components/audiogram-chart';
+import {RatingTrendChart} from '@/components/rating-trend-chart';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from '@/components/ui/card';
 import {formatFrequency, formatMinutes} from '@/lib/format';
-import {mergeMatches} from '@/lib/matching/wizard';
+import {describeInhibition} from '@/lib/matching/inhibition';
+import {type MatchResult, mergeMatches, sensationLevel} from '@/lib/matching/wizard';
 import {createBackup, parseBackup} from '@/lib/therapy/backup';
-import {mergeSessions, type Rating, type Session, sessionStats} from '@/lib/therapy/session';
-import {createMemo, createSignal, For, Show} from 'solid-js';
+import {dailyRatings, mergeSessions, type Rating, type Session, sessionStats} from '@/lib/therapy/session';
+import {createMemo, createSignal, For, onCleanup, Show} from 'solid-js';
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {
 	weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
 });
+const matchDateFormat = new Intl.DateTimeFormat(undefined, {day: 'numeric', month: 'short', year: 'numeric'});
+/** "Today" and "7 days" are recounted this often, so they roll over at midnight while the tab is open. */
+const STATS_REFRESH_MS = 60_000;
 
-export function HistoryPage() {
-	const stats = createMemo(() => sessionStats(store.sessions(), new Date()));
+/** Therapy time, the rating trend, frequency matches and hearing, sessions with backup. */
+export function ProgressPage() {
+	const [now, setNow] = createSignal(new Date());
+	const timer = setInterval(() => setNow(new Date()), STATS_REFRESH_MS);
+	onCleanup(() => clearInterval(timer));
+	const stats = createMemo(() => sessionStats(store.sessions(), now()));
+	const days = createMemo(() => dailyRatings(store.sessions()));
 	const [message, setMessage] = createSignal<{text: string; error?: boolean} | null>(null);
 	const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null);
 	let fileInput!: HTMLInputElement;
@@ -62,6 +73,24 @@ export function HistoryPage() {
 				<Stat label="Avg. change" value={formatChange(stats().meanRatingChange)}
 				      hint={stats().ratedSessions ? `over ${stats().ratedSessions} rated` : 'no rated sessions'}/>
 			</div>
+
+			<Card>
+				<CardHeader>
+					<CardTitle>Tinnitus loudness</CardTitle>
+					<CardDescription>Your 0–10 ratings before and after sessions. Lower means quieter.</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<Show when={days().length >= 2} fallback={
+						<p class="py-4 text-center text-sm text-muted-foreground">
+							Rate your tinnitus before and after sessions on at least two days to see a trend here.
+						</p>
+					}>
+						<RatingTrendChart days={days()}/>
+					</Show>
+				</CardContent>
+			</Card>
+
+			<MatchesCard/>
 
 			<Card>
 				<CardHeader>
@@ -116,6 +145,55 @@ export function HistoryPage() {
 			</Card>
 		</div>
 	);
+}
+
+function MatchesCard() {
+	const withAudiogram = () => store.matches().find(m => m.audiogram);
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>Frequency matches</CardTitle>
+				<CardDescription>
+					Loudness is how far your tinnitus is above your hearing threshold at its pitch; a drop over
+					weeks is the most objective sign of change.
+				</CardDescription>
+			</CardHeader>
+			<CardContent class="space-y-6">
+				<Show when={store.matches().length} fallback={
+					<p class="py-4 text-center text-sm text-muted-foreground">No matches yet. Run one on the Setup tab.</p>
+				}>
+					<ul class="divide-y">
+						<For each={store.matches()}>{m =>
+							<li class="flex items-baseline gap-3 py-3 text-sm">
+								<div class="min-w-0 flex-1 space-y-0.5">
+									<div class="font-medium">{matchDateFormat.format(new Date(m.date))}</div>
+									<div class="text-muted-foreground">{describeMatch(m)}</div>
+								</div>
+								<div class="text-right font-medium tabular-nums">{formatFrequency(m.frequency)}</div>
+							</li>
+						}</For>
+					</ul>
+				</Show>
+				<Show when={withAudiogram()}>{m =>
+					<div class="space-y-2">
+						<div class="text-sm font-medium">Hearing check, {matchDateFormat.format(new Date(m().date))}</div>
+						<AudiogramChart audiogram={m().audiogram!} marker={m().frequency}/>
+					</div>
+				}</Show>
+			</CardContent>
+		</Card>
+	);
+}
+
+function describeMatch(m: MatchResult) {
+	const loudness = sensationLevel(m);
+	return [
+		m.type === 'tonal' ? 'tonal' : 'hissing',
+		!m.reliable && 'rounds disagreed',
+		loudness !== null && `loudness ${loudness} dB`,
+		...(m.inhibition ?? []).map(t => `after-effect at ${formatFrequency(t.frequency)}: ${describeInhibition(t)}`),
+	].filter(Boolean).join(' · ');
 }
 
 function Stat(props: {label: string; value: string; hint?: string}) {

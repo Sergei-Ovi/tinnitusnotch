@@ -58,19 +58,24 @@ Levels are in dB re the hard output ceiling, independent of the therapy volume; 
 calibration tone plays at −30 dB. Matches are kept as a history (`matches` in localStorage and in the
 backup, optional there so older backups still import); the latest one sets the therapy frequency.
 The audiogram is kept with its match (optional field, absent in older matches).
-8. Residual inhibition check (stage 5): 60 s narrowband noise at f, then silence; ask whether tinnitus
-   got quieter and for how long. No effect → gently suggest trying ±½ octave, never block therapy.
+8. Residual inhibition ("after-effect", optional, after the loudness match): 60 s of ½-octave noise at
+   f, 10 dB above the loudness match (or 5 dB above the comparison level without one), adjustable while
+   it plays; then silence. Answer: gone / quieter / no change / louder; after an effect a stopwatch
+   from the end of the noise until "it's back" (capped at 5 min). No effect at f → gently offer to try
+   f·2^±½; an alternative that shows an effect can be adopted as the therapy frequency. Never blocks
+   therapy. Checks are kept with the match (`inhibition`, optional in older data and backups).
 
 ## Screens
 
-Tabs: Therapy / Setup / History (opens on Setup until the first session is saved).
+Tabs: Therapy / Setup / Progress (opens on Setup until the first session is saved).
 
 - **Setup** — the matching wizard (the only option on first run, with an "I know my frequency" way
   out; re-runnable) and its last result, plus manual matching (tone, log slider, octave/semitone
   steps, interactive spectrum). Wizard progress survives tab switches; a running session pauses it.
 - **Therapy** — session timer, noise colour, notch width, volume, 0–10 rating before/after.
-- **History** — stats and session list with export/import; becomes **Progress** in stage 5
-  (audiogram, frequency history, rating trend).
+- **Progress** — therapy time stats; daily mean before/after ratings as a trend chart (from two
+  rated days); frequency matches with loudness and after-effect, plus the latest hearing check;
+  session list with export/import.
 
 ## Stages (one PR each)
 
@@ -81,7 +86,7 @@ Tabs: Therapy / Setup / History (opens on Setup until the first session is saved
    — PR #3, merged.
 4. ✅ Hearing check → starting hypothesis, level equalisation, audiogram on the result.
    — PR #4, merged.
-5. ⏭ Residual inhibition + Progress screen.
+5. ✅ Residual inhibition + Progress screen. — PR #5.
 
 Each stage keeps its procedure logic in pure modules (`src/lib/…`) with Vitest, and is checked
 end-to-end in a headless browser before the PR; sound itself is checked by ear.
@@ -90,8 +95,6 @@ end-to-end in a headless browser before the PR; sound itself is checked by ear.
 
 - `tsc` fails on @kobalte/core typings in node_modules (no `skipLibCheck` in tsconfig); our code is
   clean. Fix: add `skipLibCheck` or upgrade kobalte.
-- Session stats (today / 7 days) are computed on render and don't roll over at midnight while the
-  History tab stays open.
 - Only one browser tab should run sessions: two open tabs share one localStorage draft.
 - Matching tones are loudness-equalised only when the hearing check was done; after skipping it,
   with high-frequency hearing loss the user may need the level slider to hear the upper candidates.

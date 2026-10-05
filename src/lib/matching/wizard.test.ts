@@ -1,13 +1,17 @@
 import {describe, expect, it} from 'vitest';
 import {currentPresentation} from './audiometry';
+import {inhibitionTrial} from './inhibition';
 import {MIN_LEVEL_DB, REFERENCE_DB} from './levels';
 import {firstSplit, RUNS, trialPair, TRIALS_PER_RUN} from './procedure';
 import {
+	addInhibitionTrial,
+	adoptFrequency,
 	answer,
 	calibrated,
 	chooseOctave,
 	chooseType,
 	confirmFrequency,
+	finishInhibition,
 	fineTune,
 	hearingResponse,
 	loudnessStartDb,
@@ -73,6 +77,9 @@ describe('matching wizard', () => {
 		state = setThreshold(state, -60);
 		expect(loudnessStartDb(state)).toBe(-50);
 		state = setLoudness(state, -48);
+		expect(state.step).toBe('inhibition');
+		state = addInhibitionTrial(state, inhibitionTrial(6200, 'quieter', 42));
+		state = finishInhibition(state);
 		expect(state.step).toBe('done');
 
 		const result = toResult(state, 'id-1', new Date('2026-10-05T10:00:00Z'));
@@ -83,6 +90,7 @@ describe('matching wizard', () => {
 			frequency: 6200,
 			thresholdDb: -60,
 			loudnessDb: -48,
+			inhibition: [{frequency: 6200, effect: 'quieter', seconds: 42}],
 		});
 		expect(sensationLevel(result!)).toBe(12);
 	});
@@ -91,6 +99,8 @@ describe('matching wizard', () => {
 		let state = matchAll(typeChosen('tonal'), 4000).state;
 		state = confirmFrequency(chooseOctave(state, state.frequency!));
 		state = skipLoudness(setThreshold(state, -55));
+		expect(state.step).toBe('inhibition');
+		state = finishInhibition(state);
 		expect(state.step).toBe('done');
 		const result = toResult(state, 'id', new Date());
 		expect(result?.thresholdDb).toBeNull();
@@ -125,7 +135,7 @@ describe('matching wizard', () => {
 		state = chooseType(state, 'tonal', random);
 		expect(state.run?.split).toBe(firstSplit(0, 4899));
 		state = matchAll(state, 6000).state;
-		state = skipLoudness(confirmFrequency(chooseOctave(state, state.frequency!)));
+		state = finishInhibition(skipLoudness(confirmFrequency(chooseOctave(state, state.frequency!))));
 		expect(toResult(state, 'id', new Date())?.audiogram).toEqual(state.audiogram);
 	});
 
@@ -143,6 +153,20 @@ describe('matching wizard', () => {
 		state = hearingResponse(state, true);
 		state = skipHearing(state);
 		expect(state).toMatchObject({step: 'type', audiometry: null, audiogram: null, hypothesis: null});
+	});
+
+	it('switches to a frequency only if it showed residual inhibition', () => {
+		let state = matchAll(typeChosen('tonal'), 4000).state;
+		state = skipLoudness(confirmFrequency(chooseOctave(state, 4000)));
+		state = addInhibitionTrial(state, inhibitionTrial(4000, 'none'));
+		state = addInhibitionTrial(state, inhibitionTrial(2828, 'none'));
+		state = addInhibitionTrial(state, inhibitionTrial(5657, 'gone', 30));
+		expect(adoptFrequency(state, 2828).frequency).toBe(4000);
+		expect(adoptFrequency(state, 7000).frequency).toBe(4000);
+		state = finishInhibition(adoptFrequency(state, 5657));
+		const result = toResult(state, 'id', new Date())!;
+		expect(result.frequency).toBe(5657);
+		expect(result.inhibition).toHaveLength(3);
 	});
 
 	it('starts the loudness slider at the reference without a threshold', () => {

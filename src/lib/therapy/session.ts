@@ -134,3 +134,31 @@ export function sessionStats(sessions: Session[], now: Date): SessionStats {
 		ratedSessions,
 	};
 }
+
+export type DailyRatings = {
+	/** Local midnight of the day, epoch ms. */
+	day: number;
+	/** Mean ratings that day; null when none was given. */
+	before: number | null;
+	after: number | null;
+	sessions: number;
+};
+
+/** Mean before/after ratings per local day, oldest first; days without any rating are left out. */
+export function dailyRatings(sessions: Session[]): DailyRatings[] {
+	const days = new Map<number, {before: number[]; after: number[]; sessions: number}>();
+	for (const s of sessions) {
+		const started = new Date(s.startedAt);
+		const day = new Date(started.getFullYear(), started.getMonth(), started.getDate()).getTime();
+		const entry = days.get(day) ?? {before: [], after: [], sessions: 0};
+		entry.sessions++;
+		if (s.ratingBefore !== null) entry.before.push(s.ratingBefore);
+		if (s.ratingAfter !== null) entry.after.push(s.ratingAfter);
+		days.set(day, entry);
+	}
+	const mean = (values: number[]) => values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+	return [...days.entries()]
+		.filter(([, e]) => e.before.length || e.after.length)
+		.sort(([a], [b]) => a - b)
+		.map(([day, e]) => ({day, before: mean(e.before), after: mean(e.after), sessions: e.sessions}));
+}

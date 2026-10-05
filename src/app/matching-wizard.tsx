@@ -4,8 +4,15 @@ import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from '@/components/ui/card';
 import {Slider, SliderFill, SliderLabel, SliderThumb, SliderTrack, SliderValueLabel} from '@/components/ui/slider';
 import {shiftOctaves} from '@/lib/audio/scale';
-import {formatFrequency} from '@/lib/format';
+import {formatClock, formatFrequency} from '@/lib/format';
 import {currentPresentation, PRESENTATION_COUNT} from '@/lib/matching/audiometry';
+import {
+	alternativeFrequencies,
+	describeInhibition,
+	hasEffect,
+	INHIBITION_SECONDS,
+	MAX_TIMED_SECONDS,
+} from '@/lib/matching/inhibition';
 import {MAX_LEVEL_DB, MIN_LEVEL_DB, REFERENCE_DB} from '@/lib/matching/levels';
 import {RUNS, TRIALS_PER_RUN} from '@/lib/matching/procedure';
 import {sensationLevel, type WizardState, type WizardStep} from '@/lib/matching/wizard';
@@ -20,6 +27,7 @@ const STEPS: {steps: WizardStep[]; label: string}[] = [
 	{steps: ['octave'], label: 'Octave'},
 	{steps: ['fine-tune'], label: 'Fine-tune'},
 	{steps: ['threshold', 'loudness'], label: 'Loudness'},
+	{steps: ['inhibition'], label: 'After-effect'},
 ];
 
 /** Fine-tuning range around the octave choice, in semitones either way. */
@@ -44,6 +52,7 @@ export function MatchingWizard(props: {onOpenTherapy: () => void}) {
 				<Match when={state().step === 'fine-tune'}><FineTuneStep state={state()}/></Match>
 				<Match when={state().step === 'threshold'}><ThresholdStep/></Match>
 				<Match when={state().step === 'loudness'}><LoudnessStep/></Match>
+				<Match when={state().step === 'inhibition'}><InhibitionStep state={state()}/></Match>
 				<Match when={state().step === 'done'}>
 					<DoneStep state={state()} onOpenTherapy={props.onOpenTherapy}/>
 				</Match>
@@ -368,6 +377,109 @@ function LoudnessStep() {
 	);
 }
 
+function InhibitionStep(props: {state: WizardState}) {
+	const phase = matching.inhibitionPhase;
+	const f = () => matching.testFrequency() ?? props.state.frequency!;
+	const remaining = () => Math.max(0, INHIBITION_SECONDS - matching.elapsedSeconds());
+	const atMatch = () => props.state.inhibition.filter(t => t.frequency === props.state.frequency);
+	const tried = (frequency: number) => props.state.inhibition.some(t => t.frequency === frequency);
+	/** Shown when the matched pitch had no effect: try half an octave either way. */
+	const alternatives = () => atMatch().length && !atMatch().some(hasEffect)
+		? alternativeFrequencies(props.state.frequency!).filter(a => !tried(a))
+		: [];
+	/** Alternatives that worked, which the user may switch therapy to. */
+	const better = () => atMatch().some(hasEffect) ? [] : [...new Set(props.state.inhibition
+		.filter(t => t.frequency !== props.state.frequency && hasEffect(t))
+		.map(t => t.frequency))];
+
+	return (
+		<Switch>
+			<Match when={phase() === 'intro'}>
+				<StepCard title="After-effect check (optional)"
+				          description={<>
+					          <p>
+						          You'll hear a minute of noise around {formatFrequency(f())}, then silence. Many people
+						          notice their tinnitus is quieter, or even gone, for a short while afterwards. That
+						          suggests the pitch is right; it's fine if nothing happens.
+					          </p>
+					          <p>Keep the noise comfortable: a little louder than your tinnitus, never unpleasant.</p>
+				          </>}
+				          footer={<>
+					          <Button variant="outline" onClick={matching.finishInhibition}>
+						          {props.state.inhibition.length ? 'Finish' : 'Skip'}
+					          </Button>
+					          <Button onClick={() => matching.startInhibition(f())}>Start, 1 minute</Button>
+				          </>}/>
+			</Match>
+			<Match when={phase() === 'playing'}>
+				<StepCard title="Listen to the noise"
+				          description="Just listen. When it stops, pay attention to your tinnitus."
+				          footer={<Button variant="outline" onClick={matching.stopInhibition}>Stop</Button>}>
+					<div class="text-center text-4xl font-semibold tabular-nums" aria-live="off">
+						{formatClock(remaining() * 1000)}
+					</div>
+					<LevelSlider label="Level"/>
+				</StepCard>
+			</Match>
+			<Match when={phase() === 'ask'}>
+				<StepCard title="How is your tinnitus now?" description="Compared with before the noise." footer={null}>
+					<div class="grid grid-cols-2 gap-2">
+						<Button onClick={() => matching.inhibitionEffect('gone')}>Gone</Button>
+						<Button onClick={() => matching.inhibitionEffect('quieter')}>Quieter</Button>
+						<Button variant="secondary" onClick={() => matching.inhibitionEffect('none')}>No change</Button>
+						<Button variant="secondary" onClick={() => matching.inhibitionEffect('louder')}>Louder</Button>
+					</div>
+				</StepCard>
+			</Match>
+			<Match when={phase() === 'timing'}>
+				<StepCard title="Tap when it's back to usual"
+				          description="Keep listening to your tinnitus. The timer started when the noise stopped."
+				          footer={<Button onClick={matching.inhibitionBack}>It's back</Button>}>
+					<div class="text-center text-4xl font-semibold tabular-nums">
+						{formatClock(matching.elapsedSeconds() * 1000)}
+					</div>
+					<p class="text-center text-xs text-muted-foreground">
+						Stops by itself after {MAX_TIMED_SECONDS / 60} minutes.
+					</p>
+				</StepCard>
+			</Match>
+			<Match when={phase() === 'result'}>
+				<StepCard title="After-effect"
+				          description={<>
+					          <ul class="space-y-1">
+						          <For each={props.state.inhibition}>{t =>
+							          <li>{formatFrequency(t.frequency)}: {describeInhibition(t)}</li>
+						          }</For>
+					          </ul>
+					          <Show when={alternatives().length}>
+						          <p>
+							          No after-effect isn't unusual, and therapy can still help. Sometimes it means the
+							          match is a little off: you can try half an octave lower or higher.
+						          </p>
+					          </Show>
+				          </>}
+				          footer={<Button onClick={matching.finishInhibition}>Finish</Button>}>
+					<Show when={alternatives().length || better().length}>
+						<div class="flex flex-wrap gap-2">
+							<For each={alternatives()}>{a =>
+								<Button variant="outline" onClick={() => matching.startInhibition(a)}>
+									Try {formatFrequency(a)}
+								</Button>
+							}</For>
+							<For each={better()}>{b =>
+								<Button variant="outline" disabled={props.state.frequency === b}
+								        onClick={() => matching.adoptFrequency(b)}>
+									Use {formatFrequency(b)} for therapy
+								</Button>
+							}</For>
+						</div>
+					</Show>
+				</StepCard>
+			</Match>
+		</Switch>
+	);
+}
+
 function DoneStep(props: {state: WizardState; onOpenTherapy: () => void}) {
 	const loudness = () => sensationLevel(props.state);
 	return (
@@ -392,14 +504,15 @@ function DoneStep(props: {state: WizardState; onOpenTherapy: () => void}) {
 						Tinnitus loudness: {loudness()} dB above your hearing threshold at this pitch.
 					</p>
 				</Show>
+				<Show when={props.state.inhibition.length}>
+					<p class="text-muted-foreground">
+						After-effect: {props.state.inhibition.map(t => `${formatFrequency(t.frequency)} ${describeInhibition(t)}`).join(', ')}.
+					</p>
+				</Show>
 				<Show when={props.state.audiogram}>{audiogram =>
 					<div class="space-y-2 pt-2">
 						<div class="font-medium">Hearing check</div>
 						<AudiogramChart audiogram={audiogram()} marker={props.state.frequency!}/>
-						<p class="text-xs text-muted-foreground">
-							Quietest level heard at each pitch, relative to the calibration tone; higher on the chart is better hearing.
-							Not a clinical audiogram: the headphones aren't calibrated.
-						</p>
 					</div>
 				}</Show>
 			</CardContent>

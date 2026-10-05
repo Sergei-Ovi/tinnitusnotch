@@ -84,6 +84,16 @@ describe('backup', () => {
 		expect(parseBackup(JSON.stringify(data)).ok).toBe(false);
 	});
 
+	it('keeps residual inhibition checks and rejects damaged ones', () => {
+		const inhibition = [{frequency: 6200, effect: 'quieter' as const, seconds: 40}, {frequency: 8768, effect: 'none' as const, seconds: null}];
+		const backup = createBackup(settings, [], [{...match, inhibition}], new Date());
+		const result = parseBackup(JSON.stringify(backup));
+		expect(result.ok && result.backup.matches[0].inhibition).toEqual(inhibition);
+		const data = exported();
+		data.matches[0].inhibition = [{frequency: 6200, effect: 'better', seconds: null}];
+		expect(parseBackup(JSON.stringify(data)).ok).toBe(false);
+	});
+
 	it('rejects invalid settings', () => {
 		expect(parseBackup(JSON.stringify({...exported(), settings: {...settings, noiseColor: 'blue'}})).ok).toBe(false);
 	});
